@@ -42,7 +42,7 @@ export default async function ApprovalsPage() {
       {pending && pending.length > 0 ? (
         <div className="space-y-3">
           {pending.map((item) => {
-            const company = item.companies as { name: string; grade: string } | null
+            const company = (Array.isArray(item.companies) ? item.companies[0] : item.companies) as { name: string; grade: string } | null
             const expiresAt = item.expires_at ? new Date(item.expires_at) : null
             const isExpiringSoon = expiresAt && expiresAt.getTime() - Date.now() < 4 * 60 * 60 * 1000
 

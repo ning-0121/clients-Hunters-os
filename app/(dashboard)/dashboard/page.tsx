@@ -118,7 +118,7 @@ export default async function DashboardPage() {
               <div key={reply.id} className="flex items-center justify-between p-2 rounded hover:bg-accent">
                 <div>
                   <div className="text-sm font-medium">
-                    {(reply.companies as { name: string } | null)?.name ?? 'Unknown'}
+                    {((Array.isArray(reply.companies) ? reply.companies[0] : reply.companies) as { name: string } | null)?.name ?? 'Unknown'}
                   </div>
                   <div className="text-xs text-muted-foreground capitalize">{reply.channel}</div>
                 </div>
