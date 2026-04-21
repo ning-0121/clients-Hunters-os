@@ -21,21 +21,19 @@ const DEFAULT_MODELS = {
   openai: 'gpt-4o',
 }
 
-let anthropicClient: Anthropic | null = null
-let openaiClient: OpenAI | null = null
-
+// Create fresh client each call to ensure env vars are read at request time
+// (avoids module-level singleton reading vars before Next.js injects them)
 function getAnthropic() {
-  if (!anthropicClient) {
-    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  }
-  return anthropicClient
+  // Use ARAOS_ANTHROPIC_API_KEY to avoid conflict with Claude Code's shell env var
+  const apiKey = process.env.ARAOS_ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('ARAOS_ANTHROPIC_API_KEY is not set in .env.local')
+  return new Anthropic({ apiKey })
 }
 
 function getOpenAI() {
-  if (!openaiClient) {
-    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  }
-  return openaiClient
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY is not set in .env.local')
+  return new OpenAI({ apiKey })
 }
 
 export async function callLLM(

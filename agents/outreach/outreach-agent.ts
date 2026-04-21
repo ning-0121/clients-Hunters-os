@@ -154,7 +154,8 @@ Return JSON:
     })
 
     try {
-      return JSON.parse(raw)
+      const cleaned = raw.replace(/```(?:json)?\s*([\s\S]*?)```/, '$1').trim()
+      return JSON.parse(cleaned)
     } catch {
       return {
         subject: `Quick question about ${company.name}'s sourcing`,

@@ -68,7 +68,8 @@ export class ScoreAgent extends BaseAgent {
 
     let scores: ScoringOutput
     try {
-      scores = JSON.parse(raw)
+      const cleaned = raw.replace(/```(?:json)?\s*([\s\S]*?)```/, '$1').trim()
+      scores = JSON.parse(cleaned)
     } catch {
       return { success: false, error: 'Failed to parse scoring response' }
     }

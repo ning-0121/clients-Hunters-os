@@ -12,49 +12,61 @@ export interface DiscoveryInput {
   maxLeads?: number
 }
 
-// ICP-optimized search query templates
+// Domains to skip — aggregators, social platforms, blogs, marketplaces
+const DOMAIN_BLOCKLIST = new Set([
+  'shopify.com', 'instagram.com', 'facebook.com', 'tiktok.com', 'youtube.com',
+  'reddit.com', 'pinterest.com', 'twitter.com', 'x.com', 'linkedin.com',
+  'amazon.com', 'amazon.co.uk', 'etsy.com', 'faire.com', 'alibaba.com',
+  'aliexpress.com', 'ebay.com', 'walmart.com', 'target.com',
+  'forbes.com', 'businessinsider.com', 'entrepreneur.com', 'medium.com',
+  'blog.', 'news.', 'wiki', 'wikipedia.org',
+])
+
+function isBlocklisted(domain: string): boolean {
+  return [...DOMAIN_BLOCKLIST].some((blocked) => domain.includes(blocked))
+}
+
+// ICP-optimized search query templates — target brand websites directly
 const SEARCH_TEMPLATES = [
-  // Activewear brands
-  'activewear brand "private label" OR "OEM" manufacturer site:instagram.com',
-  'yoga wear brand DTC Shopify activewear manufacturer',
-  'women activewear brand small business "looking for manufacturer"',
-  'athleisure brand Amazon FBA activewear wholesale',
-  '"activewear brand" OR "yoga brand" site:faire.com',
+  // Find brand Shopify stores
+  '"activewear" OR "yoga wear" "shop now" -site:shopify.com -site:amazon.com -site:instagram.com',
+  '"yoga leggings" "sports bra" "free shipping" "shop" -site:amazon.com -site:shopify.com',
+  '"activewear brand" "new arrivals" "leggings" site:*.com -site:shopify.com',
 
-  // TikTok / Social commerce
-  'TikTok shop activewear seller brand yoga sportswear',
-  '"tiktok shop" activewear leggings brand manufacturer',
+  // Small brands with sourcing signals
+  '"yoga wear" OR "activewear" "our story" "founded" "small brand" -site:instagram.com',
+  '"athleisure" "workout wear" "women" "shop our collection" -site:amazon.com -site:shopify.com',
 
-  // Amazon sellers
-  'site:amazon.com activewear brand "sold by" private label yoga leggings',
-  'Amazon FBA activewear yoga leggings brand private label wholesale',
+  // TikTok / Social commerce brands
+  '"activewear" "tiktok" "link in bio" "shop" -site:tiktok.com -site:instagram.com',
+  '"yoga sets" OR "gym sets" "women" "shop" "new arrivals" -site:amazon.com',
+
+  // Amazon private label brands
+  'site:amazon.com "activewear" "Visit the" Store "yoga" "leggings"',
+  'site:amazon.com "sportswear" "women" "Visit the" Store "athleisure"',
 
   // LATAM markets
-  'marca ropa deportiva "fabricante" OR "proveedor" yoga activewear',
-  'marca roupas fitness "fabricante" OR "fornecedor" yoga brasil',
-
-  // Emerging brands
-  '"new activewear brand" OR "launching activewear" 2023 OR 2024 OEM',
-  'fitness influencer "own brand" OR "my brand" activewear leggings',
+  '"ropa deportiva" "mujer" "leggings" "tienda" -site:instagram.com -site:amazon.com',
+  '"roupas fitness" "feminino" "loja" "leggings" -site:instagram.com',
 ]
 
 const TYPE_QUERIES: Record<string, string[]> = {
   amazon_seller: [
-    'Amazon activewear private label brand yoga leggings FBA',
-    'site:amazon.com activewear yoga leggings "visit the store"',
+    'site:amazon.com "activewear" "Visit the" Store "yoga" "leggings" women',
+    'site:amazon.com "sportswear" "athleisure" "Visit the" Store women brand',
   ],
   tiktok_seller: [
-    'TikTok shop activewear yoga leggings brand',
-    '"tiktok shop" sportswear leggings athleisure brand',
+    '"activewear" "yoga sets" "women" shop -site:tiktok.com -site:instagram.com',
+    '"gym wear" "sports sets" "women" "new collection" -site:amazon.com',
   ],
   latam: [
-    'marca ropa deportiva activewear yoga fabricante OEM mexico brasil',
-    'ropa deportiva mayoreo marca propia activewear colombia peru',
-    'roupas fitness marca própria fabricante OEM brasil',
+    '"ropa deportiva" "mujer" "leggings" tienda -site:instagram.com -site:amazon.com',
+    '"roupas fitness" "feminino" loja leggings -site:instagram.com',
+    '"ropa deportiva" marca propia fabricante OEM mexico colombia',
   ],
   dtc_brand: [
-    'activewear DTC brand Shopify yoga leggings manufacturer OEM',
-    'small activewear brand direct to consumer sportswear',
+    '"activewear" "yoga" "shop now" "free shipping" "our story" -site:amazon.com',
+    '"athleisure" "women" "workout" "shop our collection" -site:shopify.com',
   ],
 }
 
@@ -94,10 +106,11 @@ export class DiscoveryAgent extends BaseAgent {
       if (allResults.length >= maxLeads * 3) break
     }
 
-    // 3. Deduplicate by domain
+    // 3. Deduplicate by domain + blocklist filter
     const seen = new Set<string>()
     const deduped = allResults.filter((r) => {
       if (!r.domain || seen.has(r.domain)) return false
+      if (isBlocklisted(r.domain)) return false
       seen.add(r.domain)
       return true
     })

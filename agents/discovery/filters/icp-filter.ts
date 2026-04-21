@@ -1,5 +1,12 @@
 import { callLLMSimple } from '@/lib/llm/client'
 
+function stripMarkdownJson(text: string): string {
+  // Remove ```json ... ``` or ``` ... ``` wrappers
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (match) return match[1].trim()
+  return text.trim()
+}
+
 export interface ICPFilterInput {
   name: string
   domain: string
@@ -63,13 +70,22 @@ export async function filterByICP(companies: ICPFilterInput[]): Promise<
 }
 
 async function evaluateSingleCompany(company: ICPFilterInput): Promise<ICPFilterResult> {
-  const userMessage = `Evaluate this company as a prospect:
+  // Use whatever text we have — prefer bodyText, fall back to description/snippet
+  const textSample = company.bodyText?.trim().length > 100
+    ? company.bodyText.slice(0, 1500)
+    : (company.description ?? '')
+
+  const userMessage = `Evaluate this company as a prospect for activewear OEM manufacturing:
 
 Name: ${company.name}
 Domain: ${company.domain}
-Description: ${company.description}
-Website text sample: ${company.bodyText.slice(0, 1500)}
+Google snippet / description: ${company.description}
+Website text: ${textSample}
 Found via: ${company.source}
+
+IMPORTANT: If the domain looks like a brand website (not a blog/aggregator/social platform),
+and the snippet/description mentions activewear, yoga, sportswear, fitness apparel, leggings,
+sports bras, or athletic wear — lean toward isICP: true even with limited data.
 
 Return JSON:
 {
@@ -88,8 +104,10 @@ Return JSON:
       maxTokens: 400,
       temperature: 0.2,
     })
-    return JSON.parse(raw) as ICPFilterResult
-  } catch {
+    const cleaned = stripMarkdownJson(raw)
+    return JSON.parse(cleaned) as ICPFilterResult
+  } catch (err) {
+    console.error(`[ICPFilter] Failed for ${company.domain}:`, err)
     return {
       isICP: false,
       companyType: 'unknown',
@@ -97,7 +115,7 @@ Return JSON:
       pricePoint: 'unknown',
       hasSourcingNeed: false,
       employeeCountRange: 'unknown',
-      reasoning: 'Failed to evaluate',
+      reasoning: 'Parse error',
       confidence: 0,
     }
   }
