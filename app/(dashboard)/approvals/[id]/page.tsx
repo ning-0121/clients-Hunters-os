@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient as createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { approveAction, rejectAction } from '@/actions/approvals'
 import { Button } from '@/components/ui/button'
