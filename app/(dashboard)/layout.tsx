@@ -14,7 +14,19 @@ import {
   ListTodo,
   Package,
   ClipboardList,
+  Sun,
+  Inbox,
+  FileText,
+  Gauge,
 } from 'lucide-react'
+
+const bdItems = [
+  { href: '/bd/today',             label: '今日工作台',  icon: Sun      },
+  { href: '/bd/leads',             label: '客户池',      icon: Search   },
+  { href: '/bd/replies',           label: '回复箱',      icon: Inbox    },
+  { href: '/bd/reports',           label: '报告中心',    icon: FileText },
+  { href: '/manager/bd-dashboard', label: '经理看板',    icon: Gauge    },
+]
 
 const navItems = [
   { href: '/dashboard',             label: 'Dashboard',     icon: LayoutDashboard },
@@ -55,6 +67,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <p className="text-xs text-muted-foreground mt-0.5">Revenue Agent OS</p>
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+          <div className="pb-1 px-3">
+            <p className="text-xs font-medium text-muted-foreground/60 uppercase tracking-wider">BD 工作台</p>
+          </div>
+          {bdItems.map(({ href, label, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
+            </Link>
+          ))}
+          <div className="pt-3 pb-1 px-3">
+            <p className="text-xs font-medium text-muted-foreground/60 uppercase tracking-wider">CRM</p>
+          </div>
           {navItems.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
