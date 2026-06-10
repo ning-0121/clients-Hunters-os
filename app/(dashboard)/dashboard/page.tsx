@@ -8,16 +8,14 @@ export default async function DashboardPage() {
 
   const [
     { count: pendingApprovals },
+    { count: openTasks },
     { count: totalCompanies },
-    { count: scoredToday },
     { data: topLeads },
     { data: recentReplies },
   ] = await Promise.all([
     supabase.from('approvals').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('tasks').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_progress']),
     supabase.from('companies').select('*', { count: 'exact', head: true }).neq('status', 'raw'),
-    supabase.from('companies').select('*', { count: 'exact', head: true })
-      .eq('status', 'scored')
-      .gte('scored_at', new Date(Date.now() - 86400000).toISOString()),
     supabase.from('companies')
       .select('id, name, grade, total_score, country, status')
       .in('grade', ['A', 'B'])
@@ -60,14 +58,17 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-3xl font-bold">{totalCompanies ?? 0}</div>
-            <p className="text-sm text-muted-foreground mt-1">Total Companies</p>
+            <div className="text-3xl font-bold text-blue-600">{openTasks ?? 0}</div>
+            <p className="text-sm text-muted-foreground mt-1">Open Tasks</p>
+            {(openTasks ?? 0) > 0 && (
+              <Link href="/tasks" className="text-xs text-blue-600 hover:underline">Work queue →</Link>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-3xl font-bold text-green-600">{scoredToday ?? 0}</div>
-            <p className="text-sm text-muted-foreground mt-1">Scored Today</p>
+            <div className="text-3xl font-bold">{totalCompanies ?? 0}</div>
+            <p className="text-sm text-muted-foreground mt-1">Total Companies</p>
           </CardContent>
         </Card>
         <Card>

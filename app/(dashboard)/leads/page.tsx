@@ -2,6 +2,18 @@ import { createServiceClient as createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 
+function decodeHtml(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—')
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#\d+;/g, (m) => String.fromCharCode(parseInt(m.slice(2, -1))))
+    .trim()
+}
+
 const GRADE_STYLES: Record<string, string> = {
   A: 'bg-green-100 text-green-800 border-green-200',
   B: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -95,7 +107,7 @@ export default async function LeadsPage({
               <tr key={lead.id} className="hover:bg-muted/30 transition-colors">
                 <td className="px-4 py-3">
                   <Link href={`/companies/${lead.id}`} className="font-medium hover:underline">
-                    {lead.name}
+                    {decodeHtml(lead.name)}
                   </Link>
                   {lead.domain && (
                     <span className="text-xs text-muted-foreground ml-2">{lead.domain}</span>

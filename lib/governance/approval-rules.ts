@@ -20,7 +20,7 @@ export const L1_AUTO: GovernanceRule[] = [
   { action: 'enrich_contact',     condition: () => true },
   { action: 'score_company',      condition: () => true },
   { action: 'discovery_run',      condition: (c) => !!c.isScheduled },
-  { action: 'email_first_touch',  condition: (c) => c.grade !== 'A' },
+  // Email first touch always requires human review (L2) — removed from L1
   { action: 'linkedin_connect',   condition: (c) => c.grade !== 'A' },
   { action: 'email_followup',     condition: (c) => (c.followupCount ?? 0) <= 3 && c.grade !== 'A' },
   { action: 'linkedin_followup',  condition: (c) => (c.followupCount ?? 0) <= 2 && c.grade !== 'A' },
@@ -28,13 +28,13 @@ export const L1_AUTO: GovernanceRule[] = [
 ]
 
 export const L2_SALES: GovernanceRule[] = [
+  { action: 'email_first_touch',    condition: () => true },   // ALL first-touch emails need human approval
   { action: 'whatsapp_first_touch', condition: () => true },
   { action: 'catalog_send',         condition: () => true },
   { action: 'instagram_dm',         condition: () => true },
   { action: 'meeting_invite',       condition: (c) => c.grade !== 'A' },
   { action: 'sample_offer',         condition: (c) => (c.sampleValue ?? 0) < 500 && c.grade !== 'A' },
   { action: 'quote_draft',          condition: (c) => (c.dealValue ?? 0) < 10000 },
-  { action: 'email_first_touch',    condition: (c) => c.grade === 'A' },
 ]
 
 export const L3_BOSS: GovernanceRule[] = [

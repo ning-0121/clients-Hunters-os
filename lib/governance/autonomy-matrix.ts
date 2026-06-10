@@ -25,7 +25,7 @@ const MATRIX: Record<string, Record<Grade, AutonomyDecision>> = {
   email_first_touch: {
     A: { mode: 'semi',   requiresApproval: true,  approver: 'boss',  reason: 'VIP first touch must be human-reviewed' },
     B: { mode: 'semi',   requiresApproval: true,  approver: 'sales', reason: 'Sales confirms before sending' },
-    C: { mode: 'auto',   requiresApproval: false, approver: 'none',  reason: 'Auto send' },
+    C: { mode: 'semi',   requiresApproval: true,  approver: 'sales', reason: 'Sales confirms before sending (matches approval-rules L2)' },
     D: { mode: 'manual', requiresApproval: false, approver: 'none',  reason: 'Skip' },
   },
   whatsapp: {

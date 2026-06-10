@@ -1,0 +1,15 @@
+# Railway deployment configuration
+# Two services: web (Next.js) + worker (queue + reply scanner)
+
+[build]
+builder = "nixpacks"
+
+[[services]]
+name = "web"
+startCommand = "npm run start"
+buildCommand = "npm run build"
+
+[[services]]
+name = "worker"
+startCommand = "npm run worker"
+buildCommand = "echo 'worker ready'"

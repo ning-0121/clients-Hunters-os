@@ -15,6 +15,11 @@ export async function approveAction(formData: FormData) {
 
   if (!approval || approval.status !== 'pending') return
 
+  if (approval.expires_at && new Date(approval.expires_at) < new Date()) {
+    await supabase.from('approvals').update({ status: 'expired' }).eq('id', approvalId)
+    return
+  }
+
   await supabase
     .from('approvals')
     .update({

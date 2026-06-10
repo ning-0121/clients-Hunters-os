@@ -1,14 +1,24 @@
-import { ScoreAgent } from '@/agents/score/score-agent'
+import { ScoreAgent }    from '@/agents/score/score-agent'
 import { OutreachAgent } from '@/agents/outreach/outreach-agent'
 import { DiscoveryAgent } from '@/agents/discovery/discovery-agent'
-import { EnrichAgent } from '@/agents/enrich/enrich-agent'
+import { EnrichAgent }   from '@/agents/enrich/enrich-agent'
+import { SendEmailAgent } from '@/agents/email/send-email-agent'
+import { FollowupAgent }  from '@/agents/followup/followup-agent'
+import { TieringAgent }   from '@/agents/tiering/tiering-agent'
+import { CustomerReportAgent } from '@/agents/report/report-agent'
+import { DomesticScoreAgent } from '@/agents/score/domestic-score-agent'
 import type { BaseAgent } from '@/agents/base-agent'
 
 const registry: Record<string, () => BaseAgent> = {
-  run_discovery:  () => new DiscoveryAgent(),
-  enrich_company: () => new EnrichAgent(),
-  score_company:  () => new ScoreAgent(),
-  draft_outreach: () => new OutreachAgent(),
+  run_discovery:    () => new DiscoveryAgent(),
+  enrich_company:   () => new EnrichAgent(),
+  score_company:    () => new ScoreAgent(),
+  draft_outreach:   () => new OutreachAgent(),
+  send_email:       () => new SendEmailAgent(),
+  process_followup: () => new FollowupAgent(),
+  tier_company:     () => new TieringAgent(),
+  generate_report:  () => new CustomerReportAgent(),
+  score_domestic:   () => new DomesticScoreAgent(),
 }
 
 export class AgentFactory {

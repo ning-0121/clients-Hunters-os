@@ -1,34 +1,33 @@
 'use server'
 
-import { createServiceClient } from '@/lib/supabase/server'
-import { DiscoveryAgent } from '@/agents/discovery/discovery-agent'
+import { DiscoveryAgent, type DiscoveryInput } from '@/agents/discovery/discovery-agent'
 import { redirect } from 'next/navigation'
 
-export async function triggerDiscovery(formData: FormData) {
+export async function triggerDiscovery(formData: FormData): Promise<void> {
   const mode = formData.get('mode') as string
   const customQuery = formData.get('customQuery') as string | null
 
-  let params: Record<string, unknown>
+  let params: DiscoveryInput
 
   if (mode === 'custom' && customQuery) {
-    params = {
-      searchMode: 'quick',
-      customQuery,
-      maxLeads: 15,
-    }
+    params = { searchMode: 'quick', customQuery, maxLeads: 15 }
   } else {
     const paramsStr = formData.get('params') as string
-    params = JSON.parse(paramsStr)
+    try {
+      params = JSON.parse(paramsStr) as DiscoveryInput
+    } catch {
+      console.error('[triggerDiscovery] Invalid params JSON')
+      redirect('/companies')
+    }
   }
 
-  const supabase = await createServiceClient()
+  try {
+    const agent = new DiscoveryAgent()
+    const result = await agent.execute({}, params)
+    if (!result.success) console.error('[triggerDiscovery] Agent error:', result.error)
+  } catch (err) {
+    console.error('[triggerDiscovery]', err)
+  }
 
-  // Queue for background processing
-  await supabase.from('agent_queue').insert({
-    job_type: 'run_discovery',
-    payload: params,
-    priority: 3,
-  })
-
-  redirect('/leads?discovery=queued')
+  redirect('/companies')
 }

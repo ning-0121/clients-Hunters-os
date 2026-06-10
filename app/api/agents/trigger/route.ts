@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
   // Simple auth check — replace with proper auth in production
   const authHeader = req.headers.get('authorization')
   const appSecret = process.env.APP_SECRET
-  if (appSecret && appSecret !== 'your_random_secret_32_chars_min' && authHeader !== `Bearer ${appSecret}`) {
+  if (!appSecret || authHeader !== `Bearer ${appSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   const appSecret = process.env.APP_SECRET
-  if (appSecret && appSecret !== 'your_random_secret_32_chars_min' && authHeader !== `Bearer ${appSecret}`) {
+  if (!appSecret || authHeader !== `Bearer ${appSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

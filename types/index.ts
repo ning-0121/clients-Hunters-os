@@ -28,9 +28,12 @@ export type AgentType =
   | 'enrich_agent'
   | 'score_agent'
   | 'outreach_agent'
+  | 'send_email_agent'
   | 'followup_agent'
   | 'learn_agent'
   | 'approval_agent'
+  | 'tiering_agent'
+  | 'report_agent'
 
 export type ActionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'needs_approval'
 
@@ -83,6 +86,91 @@ export interface Company {
   created_at: string
   updated_at: string
   assigned_to?: string
+  // ── Customer tiering (business feasibility — distinct from `grade`) ──
+  customer_tier?: CustomerTier
+  tier_reasoning?: string
+  compliance_level?: ComplianceLevel
+  compliance_requirements?: string[]
+  compliance_blockers?: string[]
+  conversion_feasibility_score?: number
+  strategic_value_score?: number
+  customer_scale_score?: number
+  product_match_score?: number
+  product_match?: ProductMatchItem[]
+  payment_risk_score?: number
+  recommended_development_strategy?: string
+  recommended_factory_type?: RecommendedFactoryType
+  recommended_factory_id?: string
+  target_customer_segment?: TargetCustomerSegment
+  next_action?: string
+  tiered_at?: string
+  // ── Domestic Chinese trading-company segment ──
+  domestic_company_type?: DomesticCompanyType
+  development_purpose?: DevelopmentPurpose
+  order_partner_potential_score?: number
+  software_customer_potential_score?: number
+  management_pain_signals?: string[]
+  recruitment_signals?: string[]
+  domestic_region?: string
+  recommended_domestic_strategy?: string
+}
+
+export type TargetCustomerSegment =
+  | 'overseas_brand' | 'overseas_importer' | 'retailer_chain' | 'offprice_buyer'
+  | 'domestic_trading_company' | 'domestic_factory' | 'domestic_ecommerce_seller'
+  | 'domestic_supplier' | 'agency_partner'
+
+export type DomesticCompanyType =
+  | 'apparel_trading_company' | 'activewear_trading_company' | 'general_import_export_company'
+  | 'cross_border_ecommerce_seller' | 'sourcing_agent' | 'factory_with_export_department'
+  | 'software_prospect'
+
+export type DevelopmentPurpose =
+  | 'order_cooperation' | 'software_sales' | 'channel_partnership'
+  | 'supplier_partnership' | 'unknown'
+
+export type CustomerTier = 'A' | 'B' | 'C' | 'D'
+
+export type ComplianceLevel =
+  | 'none' | 'basic_docs' | 'bsci_wrap' | 'sedex_smeta'
+  | 'oeko_grs' | 'customer_audit' | 'supplier_portal'
+
+export type RecommendedFactoryType =
+  | 'current' | 'current_after_renewal' | 'partner_smeta'
+  | 'partner_or_current' | 'unknown'
+
+export interface ProductMatchItem {
+  category: string
+  level: string
+  suggested_sku?: string
+  reason?: string
+}
+
+export interface CustomerIntelligenceReport {
+  id: string
+  company_id: string
+  report_version: number
+  report_depth: 'short' | 'standard' | 'deep'
+  report_kind?: 'overseas' | 'domestic'
+  domestic_report?: Record<string, unknown>
+  customer_tier?: CustomerTier
+  executive_summary?: Record<string, unknown>
+  company_profile?: Record<string, unknown>
+  business_model?: Record<string, unknown>
+  product_lines?: Record<string, unknown>[]
+  product_match?: Record<string, unknown>[]
+  compliance_requirements?: Record<string, unknown>
+  supplier_entry_path?: Record<string, unknown>
+  contact_strategy?: Record<string, unknown>
+  outreach_angles?: Record<string, unknown>[]
+  risk_assessment?: Record<string, unknown>[]
+  recommended_actions?: Record<string, unknown>[]
+  draft_messages?: Record<string, unknown>
+  source_urls?: Record<string, unknown>[]
+  confidence_score?: number
+  created_by?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface Contact {
@@ -224,6 +312,154 @@ export interface FollowupTask {
   completed_at?: string
   created_at: string
   updated_at: string
+}
+
+export type TaskType =
+  | 'reply_needed'
+  | 'sample_followup'
+  | 'quote_followup'
+  | 'meeting_prep'
+  | 'approval_needed'
+  | 'dormant_reactivation'
+  | 'manual'
+
+export type TaskStatus = 'open' | 'in_progress' | 'done' | 'dismissed'
+
+export interface Task {
+  id: string
+  company_id?: string
+  contact_id?: string
+  conversation_id?: string
+  reply_event_id?: string
+  task_type: TaskType
+  priority: number
+  title: string
+  detail?: string
+  suggested_action?: string
+  status: TaskStatus
+  assigned_to?: string
+  due_at?: string
+  completed_at?: string
+  completed_by?: string
+  source: string
+  created_at: string
+  updated_at: string
+}
+
+export type SampleStatus =
+  | 'requested'
+  | 'confirmed'
+  | 'in_production'
+  | 'shipped'
+  | 'delivered'
+  | 'feedback_received'
+  | 'approved'
+  | 'rejected'
+
+export interface Sample {
+  id: string
+  company_id?: string
+  contact_id?: string
+  conversation_id?: string
+  styles_requested?: string[]
+  quantity?: number
+  spec_notes?: string
+  shipping_name?: string
+  shipping_address?: string
+  shipping_country?: string
+  shipping_phone?: string
+  status: SampleStatus
+  sample_cost_usd?: number
+  cost_borne_by?: string
+  pushed_to_metronome?: boolean
+  metronome_ref?: string
+  confirmed_at?: string
+  shipped_at?: string
+  tracking_number?: string
+  carrier?: string
+  delivered_at?: string
+  feedback?: string
+  feedback_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export type OrderStatus = 'draft' | 'confirmed' | 'in_production' | 'shipped' | 'delivered' | 'cancelled'
+
+export interface Order {
+  id: string
+  company_id?: string
+  contact_id?: string
+  conversation_id?: string
+  sample_id?: string
+  order_ref?: string
+  order_value_usd?: number
+  product_lines?: Record<string, unknown>[]
+  moq_agreed?: number
+  payment_terms?: string
+  required_delivery?: string
+  destination_port?: string
+  shipping_method?: string
+  brand_requirements?: string
+  is_repeat?: boolean
+  previous_order_id?: string
+  status: OrderStatus
+  pushed_to_metronome?: boolean
+  metronome_ref?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ReportQualityReview {
+  id: string
+  company_id?: string
+  report_id?: string
+  reviewer?: string
+  overall_score?: number
+  accuracy_score?: number
+  usefulness_score?: number
+  compliance_accuracy_score?: number
+  product_match_score?: number
+  next_action_quality_score?: number
+  notes?: string
+  created_at: string
+}
+
+export type FactoryType = 'own_factory' | 'partner_factory'
+
+export interface FactoryProfile {
+  id: string
+  name: string
+  location?: string
+  factory_type?: FactoryType
+  main_categories?: string[]
+  monthly_capacity?: string
+  moq_range?: string
+  price_level?: 'low' | 'medium' | 'high'
+  cooperation_status?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface FactoryCertification {
+  id: string
+  factory_id: string
+  certification_type?: string
+  status?: 'valid' | 'expired' | 'in_renewal' | 'planned' | 'unknown'
+  expiry_date?: string
+  document_url?: string
+  notes?: string
+}
+
+export interface FactoryCapability {
+  id: string
+  factory_id: string
+  category?: string
+  capability_level?: 'strong' | 'medium' | 'weak'
+  suitable_customer_tiers?: string[]
+  suitable_regions?: string[]
+  risk_notes?: string
 }
 
 export interface LearningInsight {

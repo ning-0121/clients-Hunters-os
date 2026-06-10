@@ -58,25 +58,27 @@ export function extractDomain(url: string): string {
 }
 
 function getMockResults(query: string): SearchResult[] {
-  // Mock data for development without API key
+  // Mock data for development without SERPER_API_KEY
+  // Uses fictional domains that won't be caught by the blocklist
+  console.warn('[GoogleScraper] SERPER_API_KEY not set — returning mock results (dev mode only)')
   return [
     {
-      title: 'Gymshark - Gym Clothes & Workout Wear',
-      link: 'https://www.gymshark.com',
-      snippet: 'Shop the latest gym wear and workout clothes for men and women.',
-      domain: 'gymshark.com',
+      title: 'Peakform Activewear - Yoga & Running Apparel',
+      link: 'https://www.peakformactive.co',
+      snippet: 'DTC activewear brand specialising in yoga leggings, sports bras and running gear.',
+      domain: 'peakformactive.co',
     },
     {
-      title: 'Lululemon Athletica - Yoga Pants, Athletic Gear',
-      link: 'https://www.lululemon.com',
-      snippet: 'Technical athletic apparel for yoga, running, training and most other activities.',
-      domain: 'lululemon.com',
+      title: 'Solstice Sportswear | Sustainable Athletic Wear',
+      link: 'https://solsticesportswear.com',
+      snippet: 'Eco-friendly activewear made from recycled materials. Leggings, bras, and shorts.',
+      domain: 'solsticesportswear.com',
     },
     {
-      title: 'Alphalete Athletics - Premium Fitness Apparel',
-      link: 'https://alphaleteathletics.com',
-      snippet: 'Premium fitness apparel designed for serious athletes.',
-      domain: 'alphaleteathletics.com',
+      title: 'IronVeil Fitness – Gym & Training Apparel',
+      link: 'https://ironveilfitness.com',
+      snippet: 'Performance training apparel for serious athletes. Private label gym wear.',
+      domain: 'ironveilfitness.com',
     },
   ].slice(0, 3)
 }

@@ -39,6 +39,13 @@ const DISCOVERY_PRESETS = [
     icon: '🔍',
     params: { searchMode: 'deep', targetType: 'dtc_brand', maxLeads: 30 },
   },
+  {
+    id: 'domestic_trade',
+    label: '国内服装外贸公司 (Domestic Trade)',
+    description: '义乌/杭州/宁波/广州/深圳/上海 服装·运动服外贸公司 — 订单合作 + 软件客户',
+    icon: '🇨🇳',
+    params: { searchMode: 'targeted', targetType: 'domestic_trade', maxLeads: 20 },
+  },
 ]
 
 export default async function DiscoveryPage() {

@@ -52,21 +52,34 @@ NOT GOOD TARGETS:
 
 Return ONLY valid JSON, no markdown.`
 
+const ICP_CONCURRENCY = 8  // max parallel LLM calls — prevents rate-limit spikes
+
 export async function filterByICP(companies: ICPFilterInput[]): Promise<
   Array<ICPFilterInput & { icpResult: ICPFilterResult }>
 > {
-  const results = await Promise.allSettled(
-    companies.map(async (company) => {
-      const result = await evaluateSingleCompany(company)
-      return { ...company, icpResult: result }
-    })
-  )
+  const output: Array<ICPFilterInput & { icpResult: ICPFilterResult }> = []
 
-  return results
-    .filter((r): r is PromiseFulfilledResult<ICPFilterInput & { icpResult: ICPFilterResult }> =>
-      r.status === 'fulfilled' && r.value.icpResult.isICP
+  // Process in fixed-size batches to avoid firing hundreds of concurrent LLM calls
+  for (let i = 0; i < companies.length; i += ICP_CONCURRENCY) {
+    const batch   = companies.slice(i, i + ICP_CONCURRENCY)
+    const results = await Promise.allSettled(
+      batch.map(async (company) => {
+        const result = await evaluateSingleCompany(company)
+        return { ...company, icpResult: result }
+      })
     )
-    .map((r) => r.value)
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value.icpResult.isICP) {
+        output.push(r.value)
+      }
+    }
+    // Brief pause between batches to stay within Anthropic rate limits
+    if (i + ICP_CONCURRENCY < companies.length) {
+      await new Promise(r => setTimeout(r, 300))
+    }
+  }
+
+  return output
 }
 
 async function evaluateSingleCompany(company: ICPFilterInput): Promise<ICPFilterResult> {
