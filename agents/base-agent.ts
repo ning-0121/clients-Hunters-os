@@ -1,5 +1,7 @@
 import { callLLMSimple, type LLMOptions } from '@/lib/llm/client'
 import { createServiceClient } from '@/lib/supabase/server'
+import { notify } from '@/lib/notify/notifier'
+import { withRetry } from '@/lib/util/retry'
 import type { AgentType, ActionStatus } from '@/types'
 
 export interface AgentContext {
@@ -34,7 +36,11 @@ export abstract class BaseAgent {
     userMessage: string,
     options?: Omit<LLMOptions, 'systemPrompt'>
   ): Promise<string> {
-    return callLLMSimple(systemPrompt, userMessage, options)
+    // Retry transient provider errors (Connection error / 429 / 5xx / overloaded)
+    // up to 3 times with backoff. Non-transient errors throw immediately.
+    return withRetry(() => callLLMSimple(systemPrompt, userMessage, options), {
+      label: `llm:${this.agentType}`,
+    })
   }
 
   protected async logAction(params: {
@@ -102,6 +108,14 @@ export abstract class BaseAgent {
       estimated_value: params.estimatedValue,
       requested_by: 'ai',
       expires_at: expiresAt,
+    })
+
+    // Ping the team so they can review on mobile
+    await notify({
+      title: `Approval needed: ${params.title}`,
+      body:  params.description ?? `${params.approvalType} · ${params.riskLevel ?? 'medium'} risk`,
+      url:   '/approvals',
+      priority: params.approvalLevel === 'L3' ? 'high' : 'normal',
     })
   }
 }
