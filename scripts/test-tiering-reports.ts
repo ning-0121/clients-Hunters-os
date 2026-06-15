@@ -19,6 +19,7 @@ import { validateReport, type CustomerReport } from '@/lib/reports/report-schema
 import { validateDomesticReport } from '@/lib/reports/domestic-report-schema'
 import { computeDomesticScores, type DomesticSignals } from '@/lib/scoring/domestic'
 import { matchFactory, requiredCertsFor, type FactoryLite } from '@/lib/factory/matcher'
+import { assessCredit, parseShipments } from '@/lib/credit/assess'
 
 let passed = 0
 let failed = 0
@@ -237,6 +238,19 @@ assert('valid domestic report passes', validateDomesticReport(validDomestic).ok)
 const brokenDomestic = JSON.parse(JSON.stringify(validDomestic))
 delete brokenDomestic.draft_messages.wechat_message
 assert('domestic report missing draft field fails', !validateDomesticReport(brokenDomestic).ok)
+
+// ── 8. Credit assessment ───────────────────────────────────────────────────
+console.log('\n[8] Credit assessment')
+eq('parseShipments "3,665 shipments"', parseShipments('imports with 3,665 shipments'), 3665)
+eq('parseShipments none', parseShipments('no data'), null)
+const strong = assessCredit({ customsShipments: 4000, employeeRange: '201-500', foundedYear: 2012, country: 'United States' }, 2026)
+eq('established importer → 低风险', strong.band, '低风险')
+assert('established importer risk low', strong.riskScore <= 3.5)
+const sparse = assessCredit({ country: 'United States' }, 2026)
+eq('almost no data → 数据不足', sparse.band, '数据不足')
+const risky = assessCredit({ employeeRange: '1-10', foundedYear: 2025, country: 'Nigeria', pricePoint: 'budget' }, 2026)
+eq('tiny+new+high-risk-country → 偏高', risky.band, '偏高')
+assert('credit confidence rises with evidence', strong.confidence > sparse.confidence)
 
 // ── Summary ────────────────────────────────────────────────────────────────
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed`)

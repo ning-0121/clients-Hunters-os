@@ -16,6 +16,7 @@ import {
 } from '@/lib/tiering/tiering'
 import { recommendFactoryForCompany } from '@/lib/factory/recommend'
 import { FACTORY_DECISION_LABELS } from '@/lib/factory/matcher'
+import { assessCredit, parseShipments } from '@/lib/credit/assess'
 
 const TIER_STYLES: Record<string, string> = {
   A: 'bg-purple-100 text-purple-800 border-purple-200',
@@ -100,6 +101,23 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
   const factoryMatch = company.customer_tier
     ? await recommendFactoryForCompany(company).catch(() => null)
     : null
+
+  // Grounded credit/payment-risk assessment (live, rule-based, no LLM/cost).
+  const customsForCredit = (company.source_raw as Record<string, unknown> | null)?.customs as { snippets?: string[] } | undefined
+  const credit = assessCredit({
+    customsShipments: parseShipments((customsForCredit?.snippets ?? []).join(' ')),
+    hasCustomsHistory: !!(customsForCredit?.snippets?.length) || (company.current_supplier_hints?.length ?? 0) > 0,
+    employeeRange: company.employee_count_range,
+    fundingDetected: !!company.funding_detected,
+    foundedYear: company.founded_year ?? null,
+    country: company.country ?? null,
+    estRevenue: company.estimated_annual_revenue ?? null,
+    pricePoint: company.price_point ?? null,
+  })
+  const CREDIT_BAND_STYLE: Record<string, string> = {
+    低风险: 'bg-green-100 text-green-800', 中等: 'bg-yellow-100 text-yellow-800',
+    偏高: 'bg-red-100 text-red-700', 数据不足: 'bg-gray-100 text-gray-500',
+  }
 
   // Build a merged, chronological conversation thread (outbound + inbound)
   type ThreadItem = { ts: number; dir: 'out' | 'in'; subject?: string; body?: string; meta?: string }
@@ -747,6 +765,36 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               </Card>
             )
           })()}
+
+          {/* 信用与风险评估（规则化，零成本，实时） */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                信用与风险评估
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${CREDIT_BAND_STYLE[credit.band]}`}>{credit.band}</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">风险分</span>
+                <div className="flex-1 bg-muted rounded-full h-1.5">
+                  <div className={`h-1.5 rounded-full ${credit.riskScore <= 3.5 ? 'bg-green-500' : credit.riskScore <= 6 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${(credit.riskScore / 10) * 100}%` }} />
+                </div>
+                <span className="font-mono">{credit.riskScore}/10</span>
+                <span className="text-muted-foreground">置信 {(credit.confidence * 100).toFixed(0)}%</span>
+              </div>
+              <ul className="space-y-0.5">
+                {credit.factors.map((f, i) => (
+                  <li key={i} className="flex gap-1.5">
+                    <span>{f.effect === 'good' ? '🟢' : f.effect === 'bad' ? '🔴' : '⚪'}</span>
+                    <span><span className="font-medium">{f.label}</span> — {f.note}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="border-t pt-1.5 text-muted-foreground">建议：{credit.recommendation}</p>
+              <p className="text-[10px] text-muted-foreground/70">基于公开信号的参考评估，非征信背书；大单建议人工核实 / 中信保。</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
