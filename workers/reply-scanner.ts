@@ -415,6 +415,19 @@ function taskForReply(intent: string, sentiment: string, subject: string): {
     suggestion: 'Read the reply and respond appropriately. Move the conversation toward sample or quote.' }
 }
 
+// ── One-shot scan (for serverless cron) ────────────────────────────────────────
+
+/** Run a single inbox scan + reply processing. Returns replies saved. No-op if IMAP unconfigured. */
+export async function runReplyScanOnce(): Promise<number> {
+  try {
+    getImapConfig()
+  } catch {
+    return 0
+  }
+  const emails = await scanInbox()
+  return await processReplies(emails)
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function startReplyScanner(): Promise<void> {

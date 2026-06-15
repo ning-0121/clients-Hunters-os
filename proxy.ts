@@ -48,7 +48,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Gate everything except Next internals and static assets.
-  // /api is gated too — no external cron calls these routes; workers poll the DB directly.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|ico|webp)$).*)'],
+  // Gate everything except Next internals, static assets, and cron endpoints.
+  // /api/cron/* must NOT be gated — Vercel Cron calls them server-side without a
+  // session cookie; they protect themselves with CRON_SECRET instead.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|ico|webp)$).*)'],
 }
