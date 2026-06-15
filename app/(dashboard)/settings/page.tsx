@@ -28,7 +28,7 @@ function ServiceRow({ item }: { item: ServiceIndicator }) {
       <StatusDot ok={item.configured} />
       <span className="text-sm flex-1">{item.label}</span>
       <span className="text-xs text-muted-foreground">
-        {item.configured ? item.detail ?? 'Connected' : 'Not configured'}
+        {item.configured ? item.detail ?? '已连接' : '未配置'}
       </span>
     </div>
   )
@@ -99,20 +99,20 @@ export default async function SettingsPage() {
   // ── Static factory profile ────────────────────────────────────────────────
 
   const factoryProfile = [
-    { label: 'Sender Name', value: 'Alex' },
-    { label: 'Company', value: 'Jojofashion' },
-    { label: 'Factory', value: 'Qimo Clothing' },
-    { label: 'Email', value: 'alex@jojofashion.us' },
-    { label: 'Website', value: 'jojofashion.us' },
+    { label: '发件人姓名', value: 'Alex' },
+    { label: '公司', value: 'Jojofashion' },
+    { label: '工厂', value: 'Qimo Clothing' },
+    { label: '邮箱', value: 'alex@jojofashion.us' },
+    { label: '网站', value: 'jojofashion.us' },
   ]
 
   // ── Service status indicators ─────────────────────────────────────────────
 
   const services: ServiceIndicator[] = [
-    { label: 'Supabase Database', configured: true, detail: 'Connected' },
-    { label: 'Claude AI (ARAOS_ANTHROPIC_API_KEY)', configured: true, detail: 'Active' },
-    { label: 'Serper Search (SERPER_API_KEY)', configured: true, detail: 'Active' },
-    { label: 'Gmail SMTP (GMAIL_USER)', configured: true, detail: 'Active' },
+    { label: 'Supabase 数据库', configured: true, detail: '已连接' },
+    { label: 'Claude AI (ARAOS_ANTHROPIC_API_KEY)', configured: true, detail: '运行中' },
+    { label: 'Serper 搜索 (SERPER_API_KEY)', configured: true, detail: '运行中' },
+    { label: 'Gmail SMTP (GMAIL_USER)', configured: true, detail: '运行中' },
     { label: 'LinkedIn', configured: false },
     { label: 'WhatsApp', configured: false },
   ]
@@ -120,16 +120,16 @@ export default async function SettingsPage() {
   return (
     <div className="p-6 max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">System status and configuration</p>
+        <h1 className="text-2xl font-bold">设置</h1>
+        <p className="text-sm text-muted-foreground mt-1">系统状态与配置</p>
       </div>
 
       {/* ── Factory Profile ── */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            Factory Profile
-            <Badge variant="secondary" className="text-xs font-normal">Read-only — managed via .env.local</Badge>
+            工厂资料
+            <Badge variant="secondary" className="text-xs font-normal">只读 — 通过 .env.local 管理</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -147,7 +147,7 @@ export default async function SettingsPage() {
       {/* ── System Status ── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">System Status</CardTitle>
+          <CardTitle className="text-base">系统状态</CardTitle>
         </CardHeader>
         <CardContent>
           {services.map((svc) => (
@@ -159,15 +159,15 @@ export default async function SettingsPage() {
       {/* ── Queue Stats ── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Queue Stats</CardTitle>
+          <CardTitle className="text-base">队列统计</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 py-1">
-            <StatCell label="Waiting" value={waitingJobs ?? 0} />
-            <StatCell label="Active" value={activeJobs ?? 0} />
-            <StatCell label="Completed today" value={completedToday ?? 0} />
+            <StatCell label="等待中" value={waitingJobs ?? 0} />
+            <StatCell label="执行中" value={activeJobs ?? 0} />
+            <StatCell label="今天已完成" value={completedToday ?? 0} />
             <StatCell
-              label="Failed (24h)"
+              label="失败（24 小时）"
               value={failedJobs ?? 0}
               highlight={(failedJobs ?? 0) > 0}
             />
@@ -178,19 +178,19 @@ export default async function SettingsPage() {
       {/* ── Agent Actions Stats ── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Agent Actions</CardTitle>
+          <CardTitle className="text-base">智能体操作</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 py-1">
-            <StatCell label="Total actions run" value={total} />
-            <StatCell label="Success rate" value={`${successRate}%`} />
-            <StatCell label="Actions (24h)" value={actionsLast24h ?? 0} />
+            <StatCell label="累计执行操作" value={total} />
+            <StatCell label="成功率" value={`${successRate}%`} />
+            <StatCell label="操作数（24 小时）" value={actionsLast24h ?? 0} />
           </div>
         </CardContent>
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        ARAOS · Revenue Agent OS · Stats refresh on each page load
+        ARAOS · Revenue Agent OS · 统计数据在每次页面加载时刷新
       </p>
     </div>
   )

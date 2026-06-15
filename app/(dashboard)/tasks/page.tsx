@@ -5,13 +5,13 @@ import { Badge } from '@/components/ui/badge'
 import { completeTask, dismissTask, draftReply } from '@/actions/tasks'
 
 const TYPE_LABEL: Record<string, string> = {
-  reply_needed:         'Reply',
-  sample_followup:      'Sample',
-  quote_followup:       'Quote',
-  meeting_prep:         'Meeting',
-  approval_needed:      'Approval',
-  dormant_reactivation: 'Reactivate',
-  manual:               'Manual',
+  reply_needed:         '回复',
+  sample_followup:      '样品跟进',
+  quote_followup:       '报价跟进',
+  meeting_prep:         '会议准备',
+  approval_needed:      '审批',
+  dormant_reactivation: '唤醒沉睡',
+  manual:               '手动',
 }
 
 const PRIORITY_DOT: Record<number, string> = {
@@ -43,21 +43,21 @@ export default async function TasksPage() {
   return (
     <div className="p-6 max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Today&apos;s Tasks</h1>
+        <h1 className="text-2xl font-bold">今日任务</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {counts.total} open · {counts.reply} replies to handle · {counts.sample} samples · {counts.overdue} overdue
+          {counts.total} 个待办 · {counts.reply} 个待回复 · {counts.sample} 个样品跟进 · {counts.overdue} 个已逾期
         </p>
       </div>
 
       {(!tasks || tasks.length === 0) && (
         <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">
-          🎉 No open tasks. Inbox zero.
+          🎉 暂无待办任务，全部清空。
         </CardContent></Card>
       )}
 
       {overdue.length > 0 && (
         <>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-2">Overdue</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-2">已逾期</h2>
           <div className="space-y-2 mb-6">
             {overdue.map(t => <TaskRow key={t.id} task={t} />)}
           </div>
@@ -66,7 +66,7 @@ export default async function TasksPage() {
 
       {today.length > 0 && (
         <>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Active</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">进行中</h2>
           <div className="space-y-2">
             {today.map(t => <TaskRow key={t.id} task={t} />)}
           </div>
@@ -90,10 +90,10 @@ function TaskRow({ task }: { task: Record<string, any> }) {
               <span className="font-medium text-sm">{task.title}</span>
               <Badge variant="outline" className="text-[10px]">{TYPE_LABEL[task.task_type] ?? task.task_type}</Badge>
               {company?.grade && (
-                <span className="text-[10px] font-bold text-muted-foreground">Grade {company.grade}</span>
+                <span className="text-[10px] font-bold text-muted-foreground">评级 {company.grade}</span>
               )}
               {task.status === 'in_progress' && (
-                <Badge variant="secondary" className="text-[10px]">In progress</Badge>
+                <Badge variant="secondary" className="text-[10px]">进行中</Badge>
               )}
             </div>
             {company && (
@@ -118,20 +118,20 @@ function TaskRow({ task }: { task: Record<string, any> }) {
                 <input type="hidden" name="replyEventId" value={task.reply_event_id} />
                 <input type="hidden" name="taskId" value={task.id} />
                 <button type="submit" className="text-xs px-3 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors w-full whitespace-nowrap">
-                  AI Draft Reply
+                  AI 草拟回复
                 </button>
               </form>
             )}
             <form action={completeTask}>
               <input type="hidden" name="taskId" value={task.id} />
               <button type="submit" className="text-xs px-3 py-1 border rounded-md hover:bg-accent transition-colors w-full">
-                Done
+                完成
               </button>
             </form>
             <form action={dismissTask}>
               <input type="hidden" name="taskId" value={task.id} />
               <button type="submit" className="text-xs px-3 py-1 text-muted-foreground hover:text-foreground transition-colors w-full">
-                Dismiss
+                忽略
               </button>
             </form>
           </div>

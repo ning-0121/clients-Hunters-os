@@ -14,6 +14,11 @@ function decodeHtml(str: string): string {
     .trim()
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  raw: '待富集', enriched: '已富集', scored: '已评分', outreach: '开发中',
+  engaged: '互动中', qualified: '有意向', closed_won: '已成交', closed_lost: '已流失', dormant: '沉睡',
+}
+
 const GRADE_STYLES: Record<string, string> = {
   A: 'bg-green-100 text-green-800 border-green-200',
   B: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -52,24 +57,24 @@ export default async function LeadsPage({
       {params.discovery === 'queued' && (
         <div className="mb-4 flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-md text-sm">
           <span className="animate-pulse h-2 w-2 rounded-full bg-blue-500 inline-block" />
-          Discovery job queued — new leads will appear automatically as AI finds them.
+          线索发现任务已排队 —— AI 找到新线索后会自动出现在这里。
         </div>
       )}
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Leads</h1>
+          <h1 className="text-2xl font-bold">线索</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {(rawCount ?? 0) + (enrichedCount ?? 0) + (scoredCount ?? 0)} total ·
-            {' '}{rawCount ?? 0} raw · {enrichedCount ?? 0} enriched · {scoredCount ?? 0} scored
-            {(queuedJobs ?? 0) > 0 && ` · ${queuedJobs} jobs running`}
+            {(rawCount ?? 0) + (enrichedCount ?? 0) + (scoredCount ?? 0)} 共计 ·
+            {' '}{rawCount ?? 0} 待富集 · {enrichedCount ?? 0} 已富集 · {scoredCount ?? 0} 已评分
+            {(queuedJobs ?? 0) > 0 && ` · ${queuedJobs} 个任务运行中`}
           </p>
         </div>
         <Link
           href="/leads/discovery"
           className="bg-primary text-primary-foreground text-sm px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
         >
-          + New Discovery Run
+          + 新建线索发现
         </Link>
       </div>
 
@@ -77,15 +82,15 @@ export default async function LeadsPage({
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-card border rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-orange-500">{rawCount ?? 0}</div>
-          <div className="text-xs text-muted-foreground mt-1">Raw — awaiting enrich</div>
+          <div className="text-xs text-muted-foreground mt-1">待富集 — 等待补全信息</div>
         </div>
         <div className="bg-card border rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-blue-500">{enrichedCount ?? 0}</div>
-          <div className="text-xs text-muted-foreground mt-1">Enriched — awaiting score</div>
+          <div className="text-xs text-muted-foreground mt-1">已富集 — 等待评分</div>
         </div>
         <div className="bg-card border rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-green-500">{scoredCount ?? 0}</div>
-          <div className="text-xs text-muted-foreground mt-1">Scored — ready to contact</div>
+          <div className="text-xs text-muted-foreground mt-1">已评分 — 可以开发</div>
         </div>
       </div>
 
@@ -94,12 +99,12 @@ export default async function LeadsPage({
         <table className="w-full text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Company</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Country</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Type</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Grade</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Source</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">公司</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">国家</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">类型</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">评级</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">来源</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">状态</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -136,7 +141,7 @@ export default async function LeadsPage({
                     lead.status === 'outreach' ? 'bg-purple-100 text-purple-700' :
                     'bg-gray-100 text-gray-600'
                   }`}>
-                    {lead.status}
+                    {STATUS_LABELS[lead.status] ?? lead.status}
                   </span>
                 </td>
               </tr>
@@ -144,9 +149,9 @@ export default async function LeadsPage({
             {(!leads || leads.length === 0) && (
               <tr>
                 <td colSpan={6} className="px-4 py-16 text-center text-muted-foreground">
-                  <p className="text-base mb-2">No leads yet</p>
+                  <p className="text-base mb-2">还没有线索</p>
                   <Link href="/leads/discovery" className="text-primary hover:underline text-sm">
-                    Start your first discovery run →
+                    运行第一次线索发现 →
                   </Link>
                 </td>
               </tr>

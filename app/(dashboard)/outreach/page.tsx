@@ -16,6 +16,17 @@ export default async function OutreachPage() {
     .order('created_at', { ascending: false })
     .limit(30)
 
+  const statusLabels: Record<string, string> = {
+    draft:            '草稿',
+    pending_approval: '待审批',
+    approved:         '已批准',
+    sent:             '已发送',
+    failed:           '发送失败',
+    rejected:         '已拒绝',
+    opened:           '已打开',
+    replied:          '已回复',
+  }
+
   const statusColor: Record<string, string> = {
     draft:    'bg-gray-100 text-gray-600',
     approved: 'bg-yellow-100 text-yellow-700',
@@ -28,8 +39,8 @@ export default async function OutreachPage() {
   return (
     <div className="p-6 max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Outreach</h1>
-        <p className="text-sm text-muted-foreground mt-1">{logs?.length ?? 0} emails total</p>
+        <h1 className="text-2xl font-bold">开发信</h1>
+        <p className="text-sm text-muted-foreground mt-1">共计 {logs?.length ?? 0} 封邮件</p>
       </div>
 
       <div className="space-y-3">
@@ -43,16 +54,16 @@ export default async function OutreachPage() {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[log.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                        {log.status}
+                        {statusLabels[log.status] ?? log.status}
                       </span>
                       <span className="font-medium text-sm">{company?.name ?? '—'}</span>
                       {company?.grade && (
-                        <span className="text-xs text-muted-foreground">Grade {company.grade}</span>
+                        <span className="text-xs text-muted-foreground">评级 {company.grade}</span>
                       )}
                     </div>
                     {contact?.email && (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        To: {contact.full_name ? `${contact.full_name} <${contact.email}>` : contact.email}
+                        收件人：{contact.full_name ? `${contact.full_name} <${contact.email}>` : contact.email}
                       </p>
                     )}
                   </div>
@@ -65,7 +76,7 @@ export default async function OutreachPage() {
                           type="submit"
                           className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
                         >
-                          Send Now
+                          立即发送
                         </button>
                       </form>
                     )}
@@ -74,14 +85,14 @@ export default async function OutreachPage() {
 
                 {log.subject && (
                   <div className="bg-muted/50 rounded px-3 py-2 mb-2">
-                    <p className="text-xs text-muted-foreground">Subject</p>
+                    <p className="text-xs text-muted-foreground">主题</p>
                     <p className="text-sm font-medium">{log.subject}</p>
                   </div>
                 )}
                 {log.body && (
                   <details className="group">
                     <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                      View email body ▾
+                      查看邮件正文 ▾
                     </summary>
                     <pre className="mt-2 text-xs bg-muted px-3 py-3 rounded whitespace-pre-wrap font-sans leading-relaxed">
                       {log.body}
@@ -93,8 +104,8 @@ export default async function OutreachPage() {
           )
         }) : (
           <div className="text-center py-20 text-muted-foreground">
-            <p>No outreach emails yet.</p>
-            <p className="text-sm mt-1">Score a company and click Draft Outreach to generate your first email.</p>
+            <p>暂无开发信。</p>
+            <p className="text-sm mt-1">先为公司评分，再点击「草拟开发信」生成第一封邮件。</p>
           </div>
         )}
       </div>

@@ -33,42 +33,42 @@ const COLUMNS: {
 }[] = [
   {
     key: 'raw',
-    label: 'Raw',
+    label: '待富集',
     color: 'orange',
     badgeClass: 'bg-orange-100 text-orange-700 border-orange-200',
     headerClass: 'border-t-orange-400',
   },
   {
     key: 'enriched',
-    label: 'Enriched',
+    label: '已富集',
     color: 'blue',
     badgeClass: 'bg-blue-100 text-blue-700 border-blue-200',
     headerClass: 'border-t-blue-400',
   },
   {
     key: 'scored',
-    label: 'Scored',
+    label: '已评分',
     color: 'purple',
     badgeClass: 'bg-purple-100 text-purple-700 border-purple-200',
     headerClass: 'border-t-purple-400',
   },
   {
     key: 'outreach',
-    label: 'Outreach',
+    label: '开发中',
     color: 'green',
     badgeClass: 'bg-green-100 text-green-700 border-green-200',
     headerClass: 'border-t-green-400',
   },
   {
     key: 'engaged',
-    label: 'Engaged',
+    label: '互动中',
     color: 'teal',
     badgeClass: 'bg-teal-100 text-teal-700 border-teal-200',
     headerClass: 'border-t-teal-400',
   },
   {
     key: 'qualified',
-    label: 'Qualified',
+    label: '有意向',
     color: 'indigo',
     badgeClass: 'bg-indigo-100 text-indigo-700 border-indigo-200',
     headerClass: 'border-t-indigo-400',
@@ -130,9 +130,9 @@ export default async function PipelinePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold">Pipeline</h1>
+          <h1 className="text-2xl font-bold">销售漏斗</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {allCompanies.length} active companies
+            {allCompanies.length} 家进行中的公司
           </p>
         </div>
         {totalRaw > 0 && (
@@ -141,7 +141,7 @@ export default async function PipelinePage() {
               type="submit"
               className="text-sm px-4 py-2 bg-orange-50 border border-orange-200 text-orange-700 rounded-md hover:bg-orange-100 transition-colors font-medium"
             >
-              ⚡ Process All Raw ({totalRaw})
+              ⚡ 批量处理待富集 ({totalRaw})
             </button>
           </form>
         )}
@@ -171,7 +171,7 @@ export default async function PipelinePage() {
               {/* Cards */}
               <div className="flex flex-col gap-2 p-2 overflow-y-auto max-h-[calc(100vh-220px)]">
                 {cards.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-6">Empty</p>
+                  <p className="text-xs text-muted-foreground text-center py-6">暂无</p>
                 )}
                 {cards.map((c) => {
                   const emailCount = outreachCounts[c.id] ?? 0
@@ -219,7 +219,7 @@ export default async function PipelinePage() {
                         {/* Email count */}
                         {emailCount > 0 && (
                           <p className="text-[10px] text-muted-foreground">
-                            {emailCount} email{emailCount !== 1 ? 's' : ''} sent
+                            已发送 {emailCount} 封邮件
                           </p>
                         )}
 

@@ -43,6 +43,15 @@ const triggerIcon: Record<string, string> = {
   scaling:      '📈',
 }
 
+const triggerLabel: Record<string, string> = {
+  hiring:         '招聘',
+  funding:        '融资',
+  sustainability: '可持续发展',
+  new_product:    '新产品',
+  press:          '媒体报道',
+  scaling:        '业务扩张',
+}
+
 export default async function AnalyticsPage({
   searchParams,
 }: {
@@ -164,15 +173,23 @@ export default async function AnalyticsPage({
     wrong_person:   'text-gray-400',
   }
 
-  const windowLabel: Record<string, string> = { today: 'Today', '7d': 'Last 7 days', '30d': 'Last 30 days' }
+  const windowLabel: Record<string, string> = { today: '今天', '7d': '近 7 天', '30d': '近 30 天' }
+
+  const sentimentLabel: Record<string, string> = {
+    positive:       '积极',
+    neutral:        '中性',
+    negative:       '消极',
+    not_interested: '不感兴趣',
+    unknown:        '未知',
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-4xl">
       {/* Header + Window Toggle */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-1">Full funnel · Discovery → Outreach → Reply → Opportunity</p>
+          <h1 className="text-2xl font-bold">数据分析</h1>
+          <p className="text-sm text-muted-foreground mt-1">完整漏斗 · 线索发现 → 开发信 → 回复 → 商机</p>
         </div>
         <div className="flex gap-1 rounded-lg border p-1 bg-muted/40">
           {['today', '7d', '30d'].map(w => (
@@ -191,35 +208,35 @@ export default async function AnalyticsPage({
 
       {/* Top Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat label={`Emails Sent (${windowLabel[window]})`} value={emailsThisWindow ?? 0}
-          sub={`${emailsSent ?? 0} all time`} color="text-blue-600" />
-        <Stat label="Reply Rate (all time)" value={`${replyRate}%`}
-          sub={`${repliesTotal ?? 0} total replies`}
+        <Stat label={`已发送邮件（${windowLabel[window]}）`} value={emailsThisWindow ?? 0}
+          sub={`累计 ${emailsSent ?? 0} 封`} color="text-blue-600" />
+        <Stat label="回复率（累计）" value={`${replyRate}%`}
+          sub={`共计 ${repliesTotal ?? 0} 条回复`}
           color={(repliesTotal ?? 0) > 0 ? 'text-green-600' : ''} />
-        <Stat label="Qualified Leads" value={qualifiedCount ?? 0}
-          sub="want meeting / sample / quote" color={(qualifiedCount ?? 0) > 0 ? 'text-indigo-600' : ''} />
-        <Stat label="Meetings" value={meetingsCount ?? 0}
-          sub={`${conversationsActive ?? 0} open conversations`}
+        <Stat label="有意向线索" value={qualifiedCount ?? 0}
+          sub="想要会议 / 样品 / 报价" color={(qualifiedCount ?? 0) > 0 ? 'text-indigo-600' : ''} />
+        <Stat label="会议" value={meetingsCount ?? 0}
+          sub={`${conversationsActive ?? 0} 个进行中的对话`}
           color={(meetingsCount ?? 0) > 0 ? 'text-emerald-600' : ''} />
       </div>
 
       {/* Pipeline Funnel */}
       <div className="rounded-lg border divide-y">
         <div className="px-5 py-3 bg-muted/40">
-          <h2 className="font-semibold text-sm">Pipeline Funnel</h2>
+          <h2 className="font-semibold text-sm">销售漏斗</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {totalCompanies} total companies · stage conversion
+            共计 {totalCompanies} 家客户公司 · 各阶段转化
           </p>
         </div>
         <div className="px-5 py-5 space-y-3">
           {[
-            { label: 'Raw',       key: 'raw',        color: 'bg-orange-400' },
-            { label: 'Enriched',  key: 'enriched',   color: 'bg-blue-400'   },
-            { label: 'Scored',    key: 'scored',     color: 'bg-purple-400' },
-            { label: 'Outreach',  key: 'outreach',   color: 'bg-green-400'  },
-            { label: 'Engaged',   key: 'engaged',    color: 'bg-teal-400'   },
-            { label: 'Qualified', key: 'qualified',  color: 'bg-indigo-500' },
-            { label: 'Won',       key: 'closed_won', color: 'bg-emerald-600' },
+            { label: '待富集',   key: 'raw',        color: 'bg-orange-400' },
+            { label: '已富集',   key: 'enriched',   color: 'bg-blue-400'   },
+            { label: '已评分',   key: 'scored',     color: 'bg-purple-400' },
+            { label: '开发中',   key: 'outreach',   color: 'bg-green-400'  },
+            { label: '互动中',   key: 'engaged',    color: 'bg-teal-400'   },
+            { label: '有意向',   key: 'qualified',  color: 'bg-indigo-500' },
+            { label: '已成交',   key: 'closed_won', color: 'bg-emerald-600' },
           ].map(row => (
             <FunnelBar
               key={row.key}
@@ -236,14 +253,14 @@ export default async function AnalyticsPage({
         {/* Grade Distribution */}
         <div className="rounded-lg border divide-y">
           <div className="px-5 py-3 bg-muted/40">
-            <h2 className="font-semibold text-sm">Lead Quality (by Grade)</h2>
+            <h2 className="font-semibold text-sm">线索质量（按评级）</h2>
           </div>
           <div className="px-5 py-4 space-y-3">
             {[
-              { grade: 'A', label: 'Grade A — High priority', color: 'bg-green-500' },
-              { grade: 'B', label: 'Grade B — Good fit',      color: 'bg-blue-500'  },
-              { grade: 'C', label: 'Grade C — Average',       color: 'bg-yellow-500'},
-              { grade: 'D', label: 'Grade D — Low priority',  color: 'bg-gray-400'  },
+              { grade: 'A', label: 'A 级 — 高优先级', color: 'bg-green-500' },
+              { grade: 'B', label: 'B 级 — 较匹配',   color: 'bg-blue-500'  },
+              { grade: 'C', label: 'C 级 — 一般',     color: 'bg-yellow-500'},
+              { grade: 'D', label: 'D 级 — 低优先级', color: 'bg-gray-400'  },
             ].map(row => {
               const count = gradeCounts[row.grade] ?? 0
               const total = Object.values(gradeCounts).reduce((a, b) => a + b, 0)
@@ -266,17 +283,17 @@ export default async function AnalyticsPage({
         {/* Reply Sentiment */}
         <div className="rounded-lg border divide-y">
           <div className="px-5 py-3 bg-muted/40">
-            <h2 className="font-semibold text-sm">Reply Sentiment</h2>
+            <h2 className="font-semibold text-sm">回复情绪</h2>
           </div>
           <div className="px-5 py-4">
             {(repliesTotal ?? 0) === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No replies yet</p>
+              <p className="text-sm text-muted-foreground py-4 text-center">暂无回复</p>
             ) : (
               <div className="space-y-3">
                 {Object.entries(sentimentMap).map(([s, count]) => (
                   <div key={s} className="flex items-center justify-between">
                     <span className={`text-sm capitalize ${sentimentColor[s] ?? ''}`}>
-                      {s.replace('_', ' ')}
+                      {sentimentLabel[s] ?? s.replace('_', ' ')}
                     </span>
                     <div className="flex items-center gap-2">
                       <div className="w-24 bg-muted rounded-full h-2">
@@ -297,15 +314,15 @@ export default async function AnalyticsPage({
       {(repliesTotal ?? 0) > 0 && (
         <div className="rounded-lg border divide-y">
           <div className="px-5 py-3 bg-muted/40">
-            <h2 className="font-semibold text-sm">Reply Intent Breakdown</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">What prospects are asking for</p>
+            <h2 className="font-semibold text-sm">回复意图分布</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">潜在客户的诉求</p>
           </div>
           <div className="px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { key: 'want_meeting', label: 'Want Meeting' },
-              { key: 'want_quote',   label: 'Want Quote' },
-              { key: 'want_sample',  label: 'Want Sample' },
-              { key: 'want_catalog', label: 'Want Catalog' },
+              { key: 'want_meeting', label: '想要会议' },
+              { key: 'want_quote',   label: '想要报价' },
+              { key: 'want_sample',  label: '想要样品' },
+              { key: 'want_catalog', label: '想要目录' },
             ].map(({ key, label }) => (
               <div key={key} className="text-center">
                 <div className={`text-2xl font-bold ${intentColor[key]}`}>
@@ -322,9 +339,9 @@ export default async function AnalyticsPage({
       {triggerRows.length > 0 && (
         <div className="rounded-lg border divide-y">
           <div className="px-5 py-3 bg-muted/40">
-            <h2 className="font-semibold text-sm">Trigger Performance</h2>
+            <h2 className="font-semibold text-sm">触发信号表现</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Which buying signals lead to the most engagement
+              哪些采购信号带来最多互动
             </p>
           </div>
           <div className="divide-y">
@@ -335,8 +352,8 @@ export default async function AnalyticsPage({
                   <span className="text-lg w-7 shrink-0">{triggerIcon[trigType] ?? '📊'}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium capitalize">{trigType.replace('_', ' ')}</span>
-                      <span className="text-xs text-muted-foreground">{stats.total} leads</span>
+                      <span className="text-sm font-medium capitalize">{triggerLabel[trigType] ?? trigType.replace('_', ' ')}</span>
+                      <span className="text-xs text-muted-foreground">{stats.total} 条线索</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
                       <div className="h-2 rounded-full bg-teal-500 transition-all"
@@ -347,7 +364,7 @@ export default async function AnalyticsPage({
                     <div className={`text-sm font-bold ${pct > 0 ? 'text-teal-600' : 'text-muted-foreground'}`}>
                       {pct}%
                     </div>
-                    <div className="text-xs text-muted-foreground">engaged</div>
+                    <div className="text-xs text-muted-foreground">互动率</div>
                   </div>
                 </div>
               )
@@ -359,16 +376,16 @@ export default async function AnalyticsPage({
       {/* Follow-up Sequence Stats */}
       <div className="rounded-lg border divide-y">
         <div className="px-5 py-3 bg-muted/40">
-          <h2 className="font-semibold text-sm">Follow-up Sequence</h2>
+          <h2 className="font-semibold text-sm">跟进序列</h2>
         </div>
         <div className="px-5 py-4 grid grid-cols-3 gap-4 text-center">
           <div>
             <div className="text-2xl font-bold text-orange-600">{followupsScheduled ?? 0}</div>
-            <div className="text-xs text-muted-foreground mt-1">Scheduled</div>
+            <div className="text-xs text-muted-foreground mt-1">已排期</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-blue-600">{followupsSent ?? 0}</div>
-            <div className="text-xs text-muted-foreground mt-1">Sent / Completed</div>
+            <div className="text-xs text-muted-foreground mt-1">已发送 / 已完成</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-green-600">
@@ -376,7 +393,7 @@ export default async function AnalyticsPage({
                 ? `${Math.round(((repliesTotal ?? 0) / (followupsSent ?? 1)) * 100)}%`
                 : '—'}
             </div>
-            <div className="text-xs text-muted-foreground mt-1">Reply Rate</div>
+            <div className="text-xs text-muted-foreground mt-1">回复率</div>
           </div>
         </div>
       </div>
@@ -384,12 +401,12 @@ export default async function AnalyticsPage({
       {/* Recent Replies */}
       <div className="rounded-lg border divide-y">
         <div className="px-5 py-3 bg-muted/40 flex justify-between items-center">
-          <h2 className="font-semibold text-sm">Recent Replies</h2>
-          <span className="text-xs text-muted-foreground">{repliesTotal ?? 0} total</span>
+          <h2 className="font-semibold text-sm">最近回复</h2>
+          <span className="text-xs text-muted-foreground">共计 {repliesTotal ?? 0} 条</span>
         </div>
         {(recentReplies ?? []).length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-            No replies yet — detected automatically via Gmail IMAP every 5 minutes
+            暂无回复 — 系统每 5 分钟通过 Gmail IMAP 自动检测
           </div>
         ) : (
           (recentReplies ?? []).map((r, idx) => {
@@ -401,13 +418,13 @@ export default async function AnalyticsPage({
               negative:       'bg-red-100 text-red-800',
             }
             const intentLabel: Record<string, string> = {
-              want_meeting:   '📅 Meeting',
-              want_quote:     '💲 Quote',
-              want_sample:    '📦 Sample',
-              want_catalog:   '📋 Catalog',
-              general_reply:  '💬 Reply',
-              not_interested: '🚫 Opt-out',
-              wrong_person:   '👤 Wrong person',
+              want_meeting:   '📅 想要会议',
+              want_quote:     '💲 想要报价',
+              want_sample:    '📦 想要样品',
+              want_catalog:   '📋 想要目录',
+              general_reply:  '💬 一般回复',
+              not_interested: '🚫 退订',
+              wrong_person:   '👤 找错人',
             }
             return (
               <div key={idx} className="px-5 py-3 flex items-start justify-between gap-3">
@@ -418,7 +435,7 @@ export default async function AnalyticsPage({
                     </span>
                     {r.reply_sentiment && (
                       <span className={`text-xs px-2 py-0.5 rounded-full ${sentimentStyle[r.reply_sentiment] ?? 'bg-muted'}`}>
-                        {r.reply_sentiment.replace('_', ' ')}
+                        {sentimentLabel[r.reply_sentiment] ?? r.reply_sentiment.replace('_', ' ')}
                       </span>
                     )}
                     {r.reply_intent && r.reply_intent !== 'general_reply' && (

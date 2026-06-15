@@ -40,6 +40,11 @@ function decodeHtml(str: string): string {
     .trim()
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  raw: '待富集', enriched: '已富集', scored: '已评分', outreach: '开发中',
+  engaged: '互动中', qualified: '有意向', closed_won: '已成交', closed_lost: '已流失', dormant: '沉睡',
+}
+
 const GRADE_STYLES: Record<string, string> = {
   A: 'bg-green-100 text-green-800',
   B: 'bg-blue-100 text-blue-800',
@@ -48,15 +53,15 @@ const GRADE_STYLES: Record<string, string> = {
 }
 
 const SCORE_DIMS = [
-  { key: 'icp_fit_score',           label: 'ICP Fit' },
-  { key: 'profit_potential_score',  label: 'Profit Potential' },
-  { key: 'reply_probability_score', label: 'Reply Probability' },
-  { key: 'category_match_score',    label: 'Category Match' },
-  { key: 'size_score',              label: 'Company Size' },
-  { key: 'ltv_potential_score',     label: 'LTV Potential' },
-  { key: 'white_label_fit',         label: 'White Label Fit' },
-  { key: 'tiktok_fit',              label: 'TikTok Fit' },
-  { key: 'latam_priority',          label: 'LATAM Priority' },
+  { key: 'icp_fit_score',           label: '画像匹配' },
+  { key: 'profit_potential_score',  label: '利润潜力' },
+  { key: 'reply_probability_score', label: '回复概率' },
+  { key: 'category_match_score',    label: '品类匹配' },
+  { key: 'size_score',              label: '公司规模' },
+  { key: 'ltv_potential_score',     label: '长期价值' },
+  { key: 'white_label_fit',         label: '白标适配' },
+  { key: 'tiktok_fit',              label: 'TikTok 适配' },
+  { key: 'latam_priority',          label: '拉美优先' },
 ]
 
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -72,6 +77,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
     { data: samples },
     { data: orders },
     { data: latestReport },
+    { count: pendingJobs },
   ] = await Promise.all([
     supabase.from('companies').select('*').eq('id', id).single(),
     supabase.from('contacts').select('*').eq('company_id', id).order('contact_priority', { ascending: false }),
@@ -82,6 +88,8 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
     supabase.from('orders').select('*').eq('company_id', id).order('created_at', { ascending: false }),
     supabase.from('customer_intelligence_reports').select('id, report_version, report_depth, created_at')
       .eq('company_id', id).order('report_version', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('agent_queue').select('*', { count: 'exact', head: true })
+      .filter('payload->>companyId', 'eq', id).in('status', ['waiting', 'active']),
   ])
 
   if (!company) notFound()
@@ -130,17 +138,17 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
             <h1 className="text-2xl font-bold">{decodeHtml(company.name)}</h1>
             {company.grade && (
               <span className={`text-sm font-bold px-3 py-1 rounded-full ${GRADE_STYLES[company.grade]}`}>
-                Grade {company.grade}
+                评级 {company.grade}
               </span>
             )}
             {company.customer_tier && (
               <span className={`text-sm font-bold px-3 py-1 rounded-full border ${TIER_STYLES[company.customer_tier]}`}>
-                Tier {company.customer_tier}
+                {company.customer_tier} 级客户
               </span>
             )}
             {company.total_score && (
               <span className="text-sm text-muted-foreground font-mono">
-                Score: {company.total_score.toFixed(0)}/100
+                总分 {company.total_score.toFixed(0)}/100
               </span>
             )}
           </div>
@@ -151,17 +159,23 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               </a>
             )}
             {company.country && <span>{company.country}</span>}
-            <Badge variant="outline" className="text-xs capitalize">{company.status}</Badge>
+            <Badge variant="outline" className="text-xs">{STATUS_LABELS[company.status] ?? company.status}</Badge>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
+          {(pendingJobs ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="animate-pulse h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
+              后台处理中 · {pendingJobs}
+            </span>
+          )}
           {company.status === 'raw' && (
             <form action={triggerEnrichCompany}>
               <input type="hidden" name="companyId" value={id} />
               <button type="submit" className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">
-                Enrich
+                富集信息
               </button>
             </form>
           )}
@@ -169,7 +183,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
             <form action={triggerScoreCompany}>
               <input type="hidden" name="companyId" value={id} />
               <button type="submit" className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">
-                Score
+                评分
               </button>
             </form>
           )}
@@ -177,31 +191,31 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
             <form action={triggerDraftOutreach}>
               <input type="hidden" name="companyId" value={id} />
               <button type="submit" className="text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-                Draft Outreach
+                起草开发信
               </button>
             </form>
           )}
           <form action={triggerTierCompany}>
             <input type="hidden" name="companyId" value={id} />
             <button type="submit" className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">
-              {company.customer_tier ? 'Re-tier' : 'Classify Tier'}
+              {company.customer_tier ? '重新分级' : '客户分级'}
             </button>
           </form>
           <form action={generateReport}>
             <input type="hidden" name="companyId" value={id} />
             <button type="submit" className="text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-              {latestReport ? 'Regenerate Report' : 'Generate Report'}
+              {latestReport ? '重新生成报告' : '生成客户报告'}
             </button>
           </form>
           {latestReport && (
             <>
               <Link href={`/companies/${id}/report`} className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">
-                View Report
+                查看报告
               </Link>
               <form action={createOutreachDraftFromReport}>
                 <input type="hidden" name="companyId" value={id} />
                 <button type="submit" className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">
-                  Outreach Draft From Report
+                  从报告生成开发信
                 </button>
               </form>
             </>
@@ -221,35 +235,35 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${TIER_STYLES[company.customer_tier]}`}>
                     {TIER_LABELS[company.customer_tier as CustomerTier] ?? company.customer_tier}
                   </span>
-                  Customer Tier
+                  客户分级
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 {company.tier_reasoning && (
                   <div>
-                    <span className="text-xs font-medium text-muted-foreground">Why this tier: </span>
+                    <span className="text-xs font-medium text-muted-foreground">为什么是这个级别：</span>
                     <span className="text-xs">{company.tier_reasoning}</span>
                   </div>
                 )}
                 {company.recommended_development_strategy && (
                   <div>
-                    <span className="text-xs font-medium text-muted-foreground">Best development strategy: </span>
+                    <span className="text-xs font-medium text-muted-foreground">最佳开发策略：</span>
                     <span className="text-xs">{company.recommended_development_strategy}</span>
                   </div>
                 )}
                 {company.target_customer_segment && (
                   <div>
-                    <span className="text-xs font-medium text-muted-foreground">Segment: </span>
+                    <span className="text-xs font-medium text-muted-foreground">细分定位：</span>
                     <span className="text-xs">{company.target_customer_segment}</span>
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   {[
-                    ['Scale', company.customer_scale_score],
-                    ['Product match', company.product_match_score],
-                    ['Conversion', company.conversion_feasibility_score],
-                    ['Strategic value', company.strategic_value_score],
-                    ['Payment risk', company.payment_risk_score],
+                    ['客户规模', company.customer_scale_score],
+                    ['产品匹配', company.product_match_score],
+                    ['转化可行性', company.conversion_feasibility_score],
+                    ['战略价值', company.strategic_value_score],
+                    ['付款风险', company.payment_risk_score],
                   ].map(([label, val]) => (val !== null && val !== undefined) ? (
                     <div key={label as string} className="flex items-center gap-2">
                       <span className="text-[11px] text-muted-foreground w-24 shrink-0">{label}</span>
@@ -265,7 +279,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           ) : (
             <Card>
               <CardContent className="py-4 text-sm text-muted-foreground">
-                Not yet tiered. Click <span className="font-medium">Classify Tier</span> to assess business feasibility (scale, product match, compliance, conversion, strategic value).
+                尚未分级。点击「客户分级」评估业务可行性（规模、产品匹配、合规、转化、战略价值）。
               </CardContent>
             </Card>
           )}
@@ -273,7 +287,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Product Match */}
           {Array.isArray(company.product_match) && company.product_match.length > 0 && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Product Match with QIMO</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">与 QIMO 产品匹配</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {(company.product_match as { category: string; level: string; suggested_sku?: string; reason?: string }[]).map((p, i) => (
                   <div key={i} className="flex items-start gap-2 text-xs border-b last:border-0 pb-2 last:pb-0">
@@ -292,17 +306,17 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Compliance Blockers & Factory Matching */}
           {company.customer_tier && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Compliance & Factory Matching</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">合规与工厂匹配</CardTitle></CardHeader>
               <CardContent className="space-y-2 text-xs">
                 {company.compliance_level && (
                   <div>
-                    <span className="text-muted-foreground">Compliance bar: </span>
+                    <span className="text-muted-foreground">合规要求：</span>
                     <span className="font-medium">{COMPLIANCE_LABELS[company.compliance_level as ComplianceLevel] ?? company.compliance_level}</span>
                   </div>
                 )}
                 {company.recommended_factory_type && (
                   <div>
-                    <span className="text-muted-foreground">Factory suggestion: </span>
+                    <span className="text-muted-foreground">工厂建议：</span>
                     <span className="font-medium">{FACTORY_TYPE_LABELS[company.recommended_factory_type as RecommendedFactoryType] ?? company.recommended_factory_type}</span>
                   </div>
                 )}
@@ -310,7 +324,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                   <div className={`rounded-md p-2 mt-1 ${factoryMatch.decision === 'not_ready' ? 'bg-red-50' : factoryMatch.decision === 'partner' ? 'bg-amber-50' : 'bg-green-50'}`}>
                     <div className="font-medium">{FACTORY_DECISION_LABELS[factoryMatch.decision]}{factoryMatch.factory_name ? ` — ${factoryMatch.factory_name}` : ''}</div>
                     {factoryMatch.compliance_gap.length > 0 && (
-                      <div className="text-muted-foreground">Compliance gap: {factoryMatch.compliance_gap.join(', ')}</div>
+                      <div className="text-muted-foreground">合规缺口：{factoryMatch.compliance_gap.join(', ')}</div>
                     )}
                     <div className="mt-0.5">{factoryMatch.action_required}</div>
                   </div>
@@ -334,14 +348,14 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Next Action */}
           {company.next_action && (
             <Card className="border-primary/30">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Next Action</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">下一步行动</CardTitle></CardHeader>
               <CardContent className="flex items-center justify-between gap-3">
                 <p className="text-sm">{company.next_action}</p>
                 {latestReport && (
                   <form action={createTaskFromReport}>
                     <input type="hidden" name="companyId" value={id} />
                     <button type="submit" className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors whitespace-nowrap">
-                      Create Task
+                      创建任务
                     </button>
                   </form>
                 )}
@@ -352,7 +366,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Overview */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Overview</CardTitle>
+              <CardTitle className="text-sm">公司概况</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {company.description && (
@@ -361,25 +375,25 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               <div className="grid grid-cols-2 gap-3 text-sm">
                 {company.company_type && (
                   <div>
-                    <span className="text-muted-foreground">Type: </span>
+                    <span className="text-muted-foreground">类型：</span>
                     <span className="capitalize">{company.company_type.replace(/_/g, ' ')}</span>
                   </div>
                 )}
                 {company.price_point && (
                   <div>
-                    <span className="text-muted-foreground">Price point: </span>
+                    <span className="text-muted-foreground">价位：</span>
                     <span className="capitalize">{company.price_point}</span>
                   </div>
                 )}
                 {company.employee_count_range && (
                   <div>
-                    <span className="text-muted-foreground">Employees: </span>
+                    <span className="text-muted-foreground">员工数：</span>
                     <span>{company.employee_count_range}</span>
                   </div>
                 )}
                 {company.shopify_detected && (
                   <div>
-                    <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Shopify detected</span>
+                    <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">检测到 Shopify</span>
                   </div>
                 )}
               </div>
@@ -397,7 +411,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {score && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Score Breakdown</CardTitle>
+                <CardTitle className="text-sm">评分明细</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 mb-4">
@@ -423,7 +437,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                 )}
                 {score.recommended_strategy && (
                   <div className="mt-2">
-                    <span className="text-xs font-medium">Recommended strategy: </span>
+                    <span className="text-xs font-medium">建议策略：</span>
                     <span className="text-xs text-muted-foreground">{score.recommended_strategy}</span>
                   </div>
                 )}
@@ -435,7 +449,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {thread.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Conversation</CardTitle>
+                <CardTitle className="text-sm">沟通记录</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {thread.map((item, i) => (
@@ -447,7 +461,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                     }`}>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {item.dir === 'out' ? '→ Us' : '← Them'}
+                          {item.dir === 'out' ? '→ 我们' : '← 客户'}
                         </span>
                         <span className="text-[10px] text-muted-foreground">
                           {new Date(item.ts).toLocaleDateString()}
@@ -468,17 +482,17 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Samples */}
           {samples && samples.length > 0 && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Samples</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">样品</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {samples.map((s) => (
                   <div key={s.id} className="flex items-center justify-between text-sm border-b last:border-0 pb-2 last:pb-0">
                     <div>
                       <span className="capitalize font-medium text-xs">{s.status.replace(/_/g, ' ')}</span>
                       <span className="text-xs text-muted-foreground ml-2">
-                        {s.styles_requested?.join(', ') ?? 'Styles TBD'}{s.quantity ? ` · ${s.quantity} pcs` : ''}
+                        {s.styles_requested?.join(', ') ?? '款式待定'}{s.quantity ? ` · ${s.quantity} 件` : ''}
                       </span>
                     </div>
-                    <Link href="/samples" className="text-xs text-blue-600 hover:underline">Manage</Link>
+                    <Link href="/samples" className="text-xs text-blue-600 hover:underline">管理</Link>
                   </div>
                 ))}
               </CardContent>
@@ -488,21 +502,21 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Create Sample */}
           {canSample && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Create Sample Request</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">创建样品申请</CardTitle></CardHeader>
               <CardContent>
                 <form action={createSample} className="space-y-2">
                   <input type="hidden" name="companyId" value={id} />
                   <input type="hidden" name="contactId" value={firstContact?.id ?? ''} />
                   <div className="grid grid-cols-2 gap-2">
-                    <input name="styles" placeholder="Styles (comma-separated)" className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
-                    <input name="quantity" type="number" placeholder="Qty" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
-                    <input name="shippingCountry" placeholder="Ship to country" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
-                    <input name="shippingName" placeholder="Recipient name" className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
-                    <input name="shippingAddress" placeholder="Shipping address" className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
-                    <textarea name="specNotes" placeholder="Spec notes (fabric, color, custom requirements)" rows={2} className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
+                    <input name="styles" placeholder="款式（逗号分隔）" className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
+                    <input name="quantity" type="number" placeholder="数量" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
+                    <input name="shippingCountry" placeholder="收货国家" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
+                    <input name="shippingName" placeholder="收件人姓名" className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
+                    <input name="shippingAddress" placeholder="收货地址" className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
+                    <textarea name="specNotes" placeholder="规格备注（面料、颜色、定制要求）" rows={2} className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
                   </div>
                   <button type="submit" className="text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors w-full">
-                    Create Sample → hand off to production
+                    创建样品单 → 移交生产
                   </button>
                 </form>
               </CardContent>
@@ -512,14 +526,14 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Orders */}
           {orders && orders.length > 0 && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Orders</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">订单</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {orders.map((o) => (
                   <div key={o.id} className="flex items-center justify-between text-sm border-b last:border-0 pb-2 last:pb-0">
                     <div>
                       <span className="capitalize font-medium text-xs">{o.status.replace(/_/g, ' ')}</span>
                       <span className="text-xs text-muted-foreground ml-2">
-                        {o.order_ref ?? 'No ref'}{o.order_value_usd ? ` · $${Number(o.order_value_usd).toLocaleString()}` : ''}
+                        {o.order_ref ?? '无单号'}{o.order_value_usd ? ` · $${Number(o.order_value_usd).toLocaleString()}` : ''}
                       </span>
                       {o.pushed_to_metronome && (
                         <span className="text-[10px] text-green-600 ml-2">→ 节拍器 {o.metronome_ref ?? ''}</span>
@@ -529,7 +543,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                       <form action={confirmOrder}>
                         <input type="hidden" name="orderId" value={o.id} />
                         <button type="submit" className="text-xs px-2 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors whitespace-nowrap">
-                          Confirm → production
+                          确认 → 生产
                         </button>
                       </form>
                     )}
@@ -542,25 +556,25 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Create Order */}
           {canOrder && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Create Order</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">创建订单</CardTitle></CardHeader>
               <CardContent>
                 <form action={createOrder} className="space-y-2">
                   <input type="hidden" name="companyId" value={id} />
                   <input type="hidden" name="contactId" value={firstContact?.id ?? ''} />
                   {approvedSample && <input type="hidden" name="sampleId" value={approvedSample.id} />}
                   <div className="grid grid-cols-2 gap-2">
-                    <input name="orderRef" placeholder="Order ref / PO#" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
-                    <input name="orderValue" type="number" placeholder="Value (USD)" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
-                    <input name="moq" type="number" placeholder="Total qty" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
+                    <input name="orderRef" placeholder="订单号 / PO#" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
+                    <input name="orderValue" type="number" placeholder="金额 (USD)" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
+                    <input name="moq" type="number" placeholder="总数量" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
                     <input name="requiredDelivery" type="date" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
-                    <input name="paymentTerms" placeholder="Payment terms" className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
-                    <input name="destinationPort" placeholder="Destination port" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
-                    <input name="shippingMethod" placeholder="Shipping method" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
-                    <textarea name="productLines" placeholder="Product lines, one per line:  style:qty:unitprice" rows={2} className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2 font-mono" />
-                    <textarea name="brandRequirements" placeholder="Brand requirements (certs, hangtags, labeling)" rows={2} className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
+                    <input name="paymentTerms" placeholder="付款条款" className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
+                    <input name="destinationPort" placeholder="目的港" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
+                    <input name="shippingMethod" placeholder="运输方式" className="text-xs px-2 py-1.5 border rounded-md bg-background" />
+                    <textarea name="productLines" placeholder="产品行，每行一条：款式:数量:单价" rows={2} className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2 font-mono" />
+                    <textarea name="brandRequirements" placeholder="品牌要求（认证、吊牌、唛头）" rows={2} className="text-xs px-2 py-1.5 border rounded-md bg-background col-span-2" />
                   </div>
                   <button type="submit" className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors w-full">
-                    Create Draft Order
+                    创建订单草稿
                   </button>
                 </form>
               </CardContent>
@@ -573,7 +587,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Contacts */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Contacts</CardTitle>
+              <CardTitle className="text-sm">联系人</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {contacts && contacts.length > 0 ? contacts.map((contact) => (
@@ -592,12 +606,12 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                   )}
                   {contact.reply_probability && (
                     <div className="text-xs text-muted-foreground mt-1">
-                      Reply probability: {(contact.reply_probability * 100).toFixed(0)}%
+                      回复概率：{(contact.reply_probability * 100).toFixed(0)}%
                     </div>
                   )}
                 </div>
               )) : (
-                <p className="text-xs text-muted-foreground">No contacts yet. Enrich to find contacts.</p>
+                <p className="text-xs text-muted-foreground">暂无联系人。点击「富集信息」自动查找。</p>
               )}
             </CardContent>
           </Card>
@@ -605,12 +619,12 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {/* Social */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Social Presence</CardTitle>
+              <CardTitle className="text-sm">社媒信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               {company.instagram_handle && (
                 <div>
-                  <span className="text-muted-foreground">Instagram: </span>
+                  <span className="text-muted-foreground">Instagram：</span>
                   <a href={`https://instagram.com/${company.instagram_handle}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                     @{company.instagram_handle}
                   </a>
@@ -623,7 +637,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               )}
               {company.tiktok_handle && (
                 <div>
-                  <span className="text-muted-foreground">TikTok: </span>
+                  <span className="text-muted-foreground">TikTok：</span>
                   <a href={`https://tiktok.com/@${company.tiktok_handle}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                     @{company.tiktok_handle}
                   </a>
@@ -631,22 +645,22 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               )}
               {company.linkedin_url && (
                 <div>
-                  <span className="text-muted-foreground">LinkedIn: </span>
+                  <span className="text-muted-foreground">LinkedIn：</span>
                   <a href={company.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                    View page
+                    查看主页
                   </a>
                 </div>
               )}
               {company.amazon_store_url && (
                 <div>
-                  <span className="text-muted-foreground">Amazon: </span>
+                  <span className="text-muted-foreground">Amazon：</span>
                   <a href={company.amazon_store_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                    Store
+                    店铺
                   </a>
                 </div>
               )}
               {!company.instagram_handle && !company.tiktok_handle && !company.linkedin_url && (
-                <p className="text-xs text-muted-foreground">No social links found yet</p>
+                <p className="text-xs text-muted-foreground">暂未发现社媒链接</p>
               )}
             </CardContent>
           </Card>
@@ -655,7 +669,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {score?.recommended_channels && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Recommended Channels</CardTitle>
+                <CardTitle className="text-sm">建议触达渠道</CardTitle>
               </CardHeader>
               <CardContent className="flex gap-1.5 flex-wrap">
                 {score.recommended_channels.map((channel: string) => (

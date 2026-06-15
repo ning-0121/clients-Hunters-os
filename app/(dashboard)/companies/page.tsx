@@ -16,15 +16,15 @@ function decodeHtml(str: string): string {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  raw: 'Raw',
-  enriched: 'Enriched',
-  scored: 'Scored',
-  outreach: 'Outreach',
-  engaged: 'Engaged',
-  qualified: 'Qualified',
-  closed_won: 'Won',
-  closed_lost: 'Lost',
-  dormant: 'Dormant',
+  raw: '待富集',
+  enriched: '已富集',
+  scored: '已评分',
+  outreach: '开发中',
+  engaged: '互动中',
+  qualified: '有意向',
+  closed_won: '已成交',
+  closed_lost: '已流失',
+  dormant: '沉睡',
 }
 
 const GRADE_STYLES: Record<string, string> = {
@@ -43,12 +43,12 @@ const TIER_STYLES: Record<string, string> = {
 
 // Saved business-development filters for the sales team.
 const TIER_FILTERS: { key: string; label: string; qs: string }[] = [
-  { key: 'tier=B',                   label: 'B — primary targets',      qs: 'tier=B' },
-  { key: 'tier=A',                   label: 'A — strategic accounts',   qs: 'tier=A' },
-  { key: 'compliance=sedex_smeta',   label: 'Requires SMETA',           qs: 'compliance=sedex_smeta' },
-  { key: 'factory=current',          label: 'Current factory OK',       qs: 'factory=current' },
-  { key: 'factory=partner_smeta',    label: 'Needs partner factory',    qs: 'factory=partner_smeta' },
-  { key: 'quick=1',                  label: 'Quick conversion',         qs: 'quick=1' },
+  { key: 'tier=B',                   label: 'B 级主攻',      qs: 'tier=B' },
+  { key: 'tier=A',                   label: 'A 级战略',   qs: 'tier=A' },
+  { key: 'compliance=sedex_smeta',   label: '需要 SMETA',           qs: 'compliance=sedex_smeta' },
+  { key: 'factory=current',          label: '现工厂可做',       qs: 'factory=current' },
+  { key: 'factory=partner_smeta',    label: '需合作工厂',    qs: 'factory=partner_smeta' },
+  { key: 'quick=1',                  label: '可快速转化',         qs: 'quick=1' },
   { key: 'segment=domestic_trading_company', label: '国内外贸公司',        qs: 'segment=domestic_trading_company' },
   { key: 'domestic_type=software_prospect',  label: '软件客户 (software prospect)', qs: 'domestic_type=software_prospect' },
 ]
@@ -90,8 +90,8 @@ export default async function CompaniesPage({
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Companies</h1>
-          <p className="text-sm text-muted-foreground mt-1">{companies?.length ?? 0} companies</p>
+          <h1 className="text-2xl font-bold">客户公司</h1>
+          <p className="text-sm text-muted-foreground mt-1">共 {companies?.length ?? 0} 家</p>
         </div>
         <div className="flex gap-2">
           <form action={bulkQueueAction}>
@@ -99,14 +99,14 @@ export default async function CompaniesPage({
               type="submit"
               className="text-sm px-4 py-2 border rounded-md hover:bg-accent transition-colors"
             >
-              ⚡ Process All Raw
+              ⚡ 批量处理待富集
             </button>
           </form>
           <Link
             href="/leads/discovery"
             className="bg-primary text-primary-foreground text-sm px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
           >
-            + Discover New Leads
+            + 发现新线索
           </Link>
         </div>
       </div>
@@ -123,11 +123,11 @@ export default async function CompaniesPage({
                 : 'border-border text-muted-foreground hover:border-foreground'
             }`}
           >
-            Grade {g}
+            {g} 级
           </Link>
         ))}
         <Link href="/companies" className="px-3 py-1 rounded-full text-xs border border-border text-muted-foreground hover:border-foreground">
-          All
+          全部
         </Link>
       </div>
 
@@ -153,13 +153,13 @@ export default async function CompaniesPage({
         <table className="w-full text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Company</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Country</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Type</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Grade</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tier</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Score</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">公司</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">国家</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">类型</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">评级</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">级别</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">分数</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">状态</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -206,9 +206,9 @@ export default async function CompaniesPage({
             {(!companies || companies.length === 0) && (
               <tr>
                 <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
-                  No companies found.{' '}
+                  暂无客户公司。{' '}
                   <Link href="/leads/discovery" className="text-primary hover:underline">
-                    Start discovery →
+                    运行线索发现 →
                   </Link>
                 </td>
               </tr>

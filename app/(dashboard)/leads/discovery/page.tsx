@@ -6,42 +6,42 @@ import { Button } from '@/components/ui/button'
 const DISCOVERY_PRESETS = [
   {
     id: 'quick_us',
-    label: 'Quick — US Activewear Brands',
-    description: 'Find 10-15 US-based DTC activewear brands in minutes',
+    label: '快速 — 美国运动服品牌',
+    description: '几分钟内找到 10-15 家美国 DTC 运动服品牌',
     icon: '⚡',
     params: { searchMode: 'quick', targetMarket: 'US', maxLeads: 15 },
   },
   {
     id: 'latam',
-    label: 'LATAM Markets (Brazil + Mexico)',
-    description: 'Target activewear brands in Brazil and Mexico',
+    label: '拉美市场（巴西 + 墨西哥）',
+    description: '定向开发巴西和墨西哥的运动服品牌',
     icon: '🌎',
     params: { searchMode: 'targeted', targetMarket: 'LATAM', targetType: 'latam', maxLeads: 20 },
   },
   {
     id: 'amazon_sellers',
-    label: 'Amazon FBA Activewear Sellers',
-    description: 'Find Amazon private label activewear sellers',
+    label: '亚马逊 FBA 运动服卖家',
+    description: '寻找亚马逊自有品牌运动服卖家',
     icon: '📦',
     params: { searchMode: 'targeted', targetType: 'amazon_seller', maxLeads: 20 },
   },
   {
     id: 'tiktok_sellers',
-    label: 'TikTok Shop Sellers',
-    description: 'Discover activewear brands selling on TikTok Shop',
+    label: 'TikTok Shop 卖家',
+    description: '发现在 TikTok Shop 卖运动服的品牌',
     icon: '🎵',
     params: { searchMode: 'targeted', targetType: 'tiktok_seller', maxLeads: 20 },
   },
   {
     id: 'deep_dtc',
-    label: 'Deep — DTC Brands (Global)',
-    description: 'Comprehensive search for DTC activewear brands globally',
+    label: '深度 — 全球 DTC 品牌',
+    description: '全球范围深度搜索 DTC 运动服品牌',
     icon: '🔍',
     params: { searchMode: 'deep', targetType: 'dtc_brand', maxLeads: 30 },
   },
   {
     id: 'domestic_trade',
-    label: '国内服装外贸公司 (Domestic Trade)',
+    label: '国内服装外贸公司',
     description: '义乌/杭州/宁波/广州/深圳/上海 服装·运动服外贸公司 — 订单合作 + 软件客户',
     icon: '🇨🇳',
     params: { searchMode: 'targeted', targetType: 'domestic_trade', maxLeads: 20 },
@@ -66,14 +66,14 @@ export default async function DiscoveryPage() {
   return (
     <div className="p-6 max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Lead Discovery</h1>
+        <h1 className="text-2xl font-bold">线索发现</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          AI automatically finds, evaluates, and scores new prospects
+          AI 自动寻找、评估并给新客户线索打分
         </p>
         {(queuedJobs ?? 0) > 0 && (
           <div className="mt-2 inline-flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
             <span className="animate-pulse h-2 w-2 rounded-full bg-blue-500 inline-block" />
-            {queuedJobs} jobs in queue
+            {queuedJobs} 个任务排队中
           </div>
         )}
       </div>
@@ -94,7 +94,7 @@ export default async function DiscoveryPage() {
                 <form action={triggerDiscovery}>
                   <input type="hidden" name="params" value={JSON.stringify(preset.params)} />
                   <Button type="submit" size="sm" variant="outline" className="shrink-0">
-                    Run
+                    运行
                   </Button>
                 </form>
               </div>
@@ -106,7 +106,7 @@ export default async function DiscoveryPage() {
       {/* Custom Query */}
       <Card className="mb-8">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Custom Search Query</CardTitle>
+          <CardTitle className="text-sm">自定义搜索词</CardTitle>
         </CardHeader>
         <CardContent>
           <form action={triggerDiscovery} className="flex gap-3">
@@ -117,7 +117,7 @@ export default async function DiscoveryPage() {
               placeholder='e.g. "yoga leggings brand" site:instagram.com'
               className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            <Button type="submit" size="sm">Search</Button>
+            <Button type="submit" size="sm">搜索</Button>
           </form>
         </CardContent>
       </Card>
@@ -126,7 +126,7 @@ export default async function DiscoveryPage() {
       {recentJobs && recentJobs.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Recent Discovery Runs</CardTitle>
+            <CardTitle className="text-sm">最近的发现任务</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {recentJobs.map((job) => {
@@ -140,11 +140,11 @@ export default async function DiscoveryPage() {
                         job.status === 'running' ? 'bg-blue-500 animate-pulse' :
                         job.status === 'failed' ? 'bg-red-500' : 'bg-gray-400'
                       }`} />
-                      <span className="text-sm font-medium capitalize">{job.status}</span>
+                      <span className="text-sm font-medium">{({completed:'完成',running:'运行中',failed:'失败'} as Record<string,string>)[job.status] ?? job.status}</span>
                     </div>
                     {output && (
                       <p className="text-xs text-muted-foreground mt-0.5 ml-4">
-                        {output.saved ?? 0} saved · {output.qualified ?? 0} qualified · {output.rawResults ?? 0} found
+                        保存 {output.saved ?? 0} · 通过筛选 {output.qualified ?? 0} · 找到 {output.rawResults ?? 0}
                       </p>
                     )}
                   </div>

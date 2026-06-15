@@ -29,6 +29,12 @@ export default async function DashboardPage() {
       .limit(5),
   ])
 
+  const sentimentLabels: Record<string, string> = {
+    positive: '积极',
+    neutral: '中性',
+    negative: '消极',
+  }
+
   const gradeColor: Record<string, string> = {
     A: 'bg-green-100 text-green-800',
     B: 'bg-blue-100 text-blue-800',
@@ -39,9 +45,9 @@ export default async function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Command Center</h1>
+        <h1 className="text-2xl font-bold">总览</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          {new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
       </div>
 
@@ -50,31 +56,31 @@ export default async function DashboardPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-3xl font-bold text-orange-600">{pendingApprovals ?? 0}</div>
-            <p className="text-sm text-muted-foreground mt-1">Pending Approvals</p>
+            <p className="text-sm text-muted-foreground mt-1">待审批</p>
             {(pendingApprovals ?? 0) > 0 && (
-              <Link href="/approvals" className="text-xs text-orange-600 hover:underline">Review now →</Link>
+              <Link href="/approvals" className="text-xs text-orange-600 hover:underline">立即审批 →</Link>
             )}
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-3xl font-bold text-blue-600">{openTasks ?? 0}</div>
-            <p className="text-sm text-muted-foreground mt-1">Open Tasks</p>
+            <p className="text-sm text-muted-foreground mt-1">待办任务</p>
             {(openTasks ?? 0) > 0 && (
-              <Link href="/tasks" className="text-xs text-blue-600 hover:underline">Work queue →</Link>
+              <Link href="/tasks" className="text-xs text-blue-600 hover:underline">处理任务 →</Link>
             )}
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-3xl font-bold">{totalCompanies ?? 0}</div>
-            <p className="text-sm text-muted-foreground mt-1">Total Companies</p>
+            <p className="text-sm text-muted-foreground mt-1">客户公司总数</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-3xl font-bold text-blue-600">{recentReplies?.length ?? 0}</div>
-            <p className="text-sm text-muted-foreground mt-1">Recent Replies</p>
+            <p className="text-sm text-muted-foreground mt-1">最近回复</p>
           </CardContent>
         </Card>
       </div>
@@ -83,7 +89,7 @@ export default async function DashboardPage() {
         {/* Top Leads to Contact Today */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Top Leads — Contact Today</CardTitle>
+            <CardTitle className="text-base">高分线索 — 今天联系</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {topLeads && topLeads.length > 0 ? topLeads.map((lead) => (
@@ -104,7 +110,7 @@ export default async function DashboardPage() {
                 </div>
               </Link>
             )) : (
-              <p className="text-sm text-muted-foreground">No scored leads yet. Run discovery to get started.</p>
+              <p className="text-sm text-muted-foreground">暂无已评分线索。请先运行线索发现。</p>
             )}
           </CardContent>
         </Card>
@@ -112,23 +118,23 @@ export default async function DashboardPage() {
         {/* Recent Replies */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent Replies</CardTitle>
+            <CardTitle className="text-base">最近回复</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {recentReplies && recentReplies.length > 0 ? recentReplies.map((reply) => (
               <div key={reply.id} className="flex items-center justify-between p-2 rounded hover:bg-accent">
                 <div>
                   <div className="text-sm font-medium">
-                    {((Array.isArray(reply.companies) ? reply.companies[0] : reply.companies) as { name: string } | null)?.name ?? 'Unknown'}
+                    {((Array.isArray(reply.companies) ? reply.companies[0] : reply.companies) as { name: string } | null)?.name ?? '未知'}
                   </div>
                   <div className="text-xs text-muted-foreground capitalize">{reply.channel}</div>
                 </div>
                 <Badge variant={reply.reply_sentiment === 'positive' ? 'default' : 'secondary'} className="text-xs">
-                  {reply.reply_sentiment ?? 'unknown'}
+                  {sentimentLabels[reply.reply_sentiment ?? ''] ?? reply.reply_sentiment ?? '未知'}
                 </Badge>
               </div>
             )) : (
-              <p className="text-sm text-muted-foreground">No replies yet.</p>
+              <p className="text-sm text-muted-foreground">暂无回复。</p>
             )}
           </CardContent>
         </Card>

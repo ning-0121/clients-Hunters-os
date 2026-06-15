@@ -27,6 +27,14 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
 
   const levelColor = approval.approval_level === 'L3' ? 'text-red-600' : 'text-yellow-600'
 
+  const STATUS_LABELS: Record<string, string> = {
+    pending: '待审批',
+    approved: '已批准',
+    rejected: '已拒绝',
+    expired: '已过期',
+    executed: '已执行',
+  }
+
   return (
     <div className="p-6 max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
@@ -37,20 +45,20 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
       <div className="grid grid-cols-2 gap-4 mb-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Company</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">公司</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="font-medium">{String(company?.name ?? '—')}</p>
-            <p className="text-sm text-muted-foreground">Grade {String(company?.grade ?? '?')} · Score {String(company?.total_score ?? '?')}</p>
+            <p className="text-sm text-muted-foreground">评级 {String(company?.grade ?? '?')} · 分数 {String(company?.total_score ?? '?')}</p>
             <p className="text-sm text-muted-foreground">{String(company?.country ?? '—')}</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Contact</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">联系人</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="font-medium">{String(contact?.full_name ?? 'Unknown')}</p>
+            <p className="font-medium">{String(contact?.full_name ?? '未知')}</p>
             <p className="text-sm text-muted-foreground">{String(contact?.title ?? '—')}</p>
             <p className="text-sm text-muted-foreground">{String(contact?.email ?? '—')}</p>
           </CardContent>
@@ -60,18 +68,18 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
       {draft && (
         <Card className="mb-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">AI Draft</CardTitle>
+            <CardTitle className="text-sm">AI 草稿</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {draft.subject && (
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Subject</p>
+                <p className="text-xs text-muted-foreground mb-1">主题</p>
                 <p className="text-sm font-medium bg-muted px-3 py-2 rounded">{draft.subject}</p>
               </div>
             )}
             {draft.body && (
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Body</p>
+                <p className="text-xs text-muted-foreground mb-1">正文</p>
                 <pre className="text-sm bg-muted px-3 py-3 rounded whitespace-pre-wrap font-sans">{draft.body}</pre>
               </div>
             )}
@@ -84,13 +92,13 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
           <form action={approveAction}>
             <input type="hidden" name="approvalId" value={approval.id} />
             <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white">
-              Approve & Execute
+              批准并执行
             </Button>
           </form>
           <form action={rejectAction}>
             <input type="hidden" name="approvalId" value={approval.id} />
             <Button type="submit" variant="destructive">
-              Reject
+              拒绝
             </Button>
           </form>
         </div>
@@ -98,7 +106,7 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
 
       {approval.status !== 'pending' && (
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm">
-          <span className="capitalize font-medium">{approval.status}</span>
+          <span className="capitalize font-medium">{STATUS_LABELS[approval.status] ?? approval.status}</span>
           {approval.decided_at && (
             <span className="text-muted-foreground">· {new Date(approval.decided_at).toLocaleString()}</span>
           )}

@@ -1,28 +1,32 @@
 'use server'
 
-import { AgentFactory } from '@/agents/agent-factory'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createDirectClient, createServiceClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-/** Generate (or regenerate) a Customer Intelligence Report, then show it. */
+/**
+ * Queue a Customer Intelligence Report, then open the report page.
+ *
+ * Generating a report runs the LLM (30-120s) — too long for a serverless
+ * function. We enqueue it; the background worker (npm run worker) produces it.
+ * The report page shows a "generating" banner via ?queued=1 until it appears.
+ */
 export async function generateReport(formData: FormData): Promise<void> {
   const companyId = formData.get('companyId') as string
   const depth = (formData.get('depth') as string) || undefined
   if (!companyId) return
 
-  try {
-    const agent = AgentFactory.create('generate_report')
+  const supabase = createDirectClient()
+  await supabase.from('agent_queue').insert({
+    job_type: 'generate_report',
     // manual=true so a salesperson can force a report even for a D-tier customer.
-    const result = await agent.execute({}, { companyId, depth, manual: true })
-    if (!result.success) console.error('[Action] generate_report failed:', result.error)
-  } catch (err) {
-    console.error('[Action] generate_report threw:', err)
-  }
+    payload: { companyId, depth, manual: true },
+    priority: 2,
+  })
 
   revalidatePath(`/companies/${companyId}`)
   revalidatePath(`/companies/${companyId}/report`)
-  redirect(`/companies/${companyId}/report`)
+  redirect(`/companies/${companyId}/report?queued=1`)
 }
 
 /** Latest report row for a company (highest version). */

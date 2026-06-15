@@ -6,6 +6,17 @@ import { updateSampleStatus } from '@/actions/samples'
 
 const STATUS_FLOW = ['requested','confirmed','in_production','shipped','delivered','feedback_received','approved','rejected']
 
+const STATUS_LABELS: Record<string, string> = {
+  requested:         '已申请',
+  confirmed:         '已确认',
+  in_production:     '打样中',
+  shipped:           '已寄出',
+  delivered:         '已送达',
+  feedback_received: '已收反馈',
+  approved:          '已通过',
+  rejected:          '未通过',
+}
+
 const STATUS_STYLE: Record<string, string> = {
   requested:         'bg-gray-100 text-gray-700',
   confirmed:         'bg-blue-100 text-blue-700',
@@ -43,21 +54,21 @@ export default async function SamplesPage() {
   return (
     <div className="p-6 max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Samples</h1>
+        <h1 className="text-2xl font-bold">样品</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {active.length} active · {won} approved · {conversionRate}% sample→approval rate
+          {active.length} 个进行中 · {won} 个已通过 · 样品通过率 {conversionRate}%
         </p>
       </div>
 
       {(!samples || samples.length === 0) && (
         <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">
-          No samples yet. Create one from a company page when a prospect requests a sample.
+          暂无样品。当客户申请样品时，可在公司详情页创建样品记录。
         </CardContent></Card>
       )}
 
       {active.length > 0 && (
         <Card className="mb-6">
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Active Samples</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">进行中的样品</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {active.map(s => <SampleRow key={s.id} sample={s} />)}
           </CardContent>
@@ -66,7 +77,7 @@ export default async function SamplesPage() {
 
       {closed.length > 0 && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Closed</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">已结束</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {closed.map(s => <SampleRow key={s.id} sample={s} />)}
           </CardContent>
@@ -86,23 +97,23 @@ function SampleRow({ sample }: { sample: Record<string, any> }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLE[sample.status]}`}>
-              {sample.status.replace(/_/g, ' ')}
+              {STATUS_LABELS[sample.status] ?? sample.status.replace(/_/g, ' ')}
             </span>
             {company && (
               <Link href={`/companies/${sample.company_id}`} className="text-sm font-medium text-blue-600 hover:underline">
                 {company.name}
               </Link>
             )}
-            {company?.grade && <span className="text-[10px] text-muted-foreground font-bold">Grade {company.grade}</span>}
+            {company?.grade && <span className="text-[10px] text-muted-foreground font-bold">评级 {company.grade}</span>}
           </div>
           <div className="text-xs text-muted-foreground mt-1">
-            {sample.styles_requested?.length ? sample.styles_requested.join(', ') : 'Styles TBD'}
-            {sample.quantity ? ` · ${sample.quantity} pcs` : ''}
+            {sample.styles_requested?.length ? sample.styles_requested.join(', ') : '款式待定'}
+            {sample.quantity ? ` · ${sample.quantity} 件` : ''}
             {sample.shipping_country ? ` · → ${sample.shipping_country}` : ''}
           </div>
           {sample.tracking_number && (
             <div className="text-xs text-muted-foreground mt-0.5">
-              {sample.carrier ?? 'Tracking'}: {sample.tracking_number}
+              {sample.carrier ?? '快递单号'}: {sample.tracking_number}
             </div>
           )}
           {sample.feedback && (
@@ -125,7 +136,7 @@ function SampleRow({ sample }: { sample: Record<string, any> }) {
                       : 'bg-primary text-primary-foreground hover:bg-primary/90'
                   }`}
                 >
-                  Mark {ns.replace(/_/g, ' ')}
+                  标记为{STATUS_LABELS[ns] ?? ns.replace(/_/g, ' ')}
                 </button>
               </form>
             ))}

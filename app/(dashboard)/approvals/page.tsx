@@ -3,6 +3,13 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { approveAction, rejectAction } from '@/actions/approvals'
 
+const RISK_LABELS: Record<string, string> = {
+  low:      '低',
+  medium:   '中',
+  high:     '高',
+  critical: '极高',
+}
+
 const LEVEL_STYLES: Record<string, string> = {
   L2: 'bg-yellow-100 text-yellow-800',
   L3: 'bg-red-100 text-red-800',
@@ -33,9 +40,9 @@ export default async function ApprovalsPage() {
   return (
     <div className="p-4 sm:p-6 max-w-4xl">
       <div className="mb-4 sm:mb-6">
-        <h1 className="text-2xl font-bold">Approvals</h1>
+        <h1 className="text-2xl font-bold">审批</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {pending?.length ?? 0} pending — review each AI-drafted email before it sends
+          {pending?.length ?? 0} 条待审批 — 发送前请逐一审核 AI 草拟的邮件
         </p>
       </div>
 
@@ -61,16 +68,16 @@ export default async function ApprovalsPage() {
                         </span>
                         {item.risk_level && (
                           <span className={`text-xs px-2 py-0.5 rounded-full ${RISK_STYLES[item.risk_level]}`}>
-                            {item.risk_level} risk
+                            {RISK_LABELS[item.risk_level] ?? item.risk_level}风险
                           </span>
                         )}
                         {isExpiringSoon && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Expiring soon</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">即将过期</span>
                         )}
                       </div>
-                      <p className="font-medium">{company?.name ?? 'Unknown'} {company?.grade ? `— Grade ${company.grade}` : ''}</p>
+                      <p className="font-medium">{company?.name ?? '未知'} {company?.grade ? `— 评级 ${company.grade}` : ''}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        To: {contact?.full_name ? `${contact.full_name} <${contact.email}>` : (contact?.email ?? 'No contact found')}
+                        收件人：{contact?.full_name ? `${contact.full_name} <${contact.email}>` : (contact?.email ?? '未找到联系人')}
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground shrink-0">{new Date(item.created_at).toLocaleDateString()}</p>
@@ -79,7 +86,7 @@ export default async function ApprovalsPage() {
                   {/* Email Subject */}
                   {draft?.subject && (
                     <div className="bg-muted/50 rounded px-3 py-2 mb-3">
-                      <p className="text-xs text-muted-foreground mb-0.5">Subject</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">主题</p>
                       <p className="text-sm font-medium">{draft.subject}</p>
                     </div>
                   )}
@@ -88,7 +95,7 @@ export default async function ApprovalsPage() {
                   {draft?.body && (
                     <details className="mb-3">
                       <summary className="text-xs text-blue-600 cursor-pointer hover:underline">
-                        View full email ▾
+                        查看完整邮件 ▾
                       </summary>
                       <pre className="mt-2 text-xs bg-muted px-3 py-3 rounded whitespace-pre-wrap font-sans leading-relaxed border-l-2 border-orange-300">
                         {draft.body}
@@ -101,17 +108,17 @@ export default async function ApprovalsPage() {
                     <form action={approveAction} className="flex-1 sm:flex-none">
                       <input type="hidden" name="approvalId" value={item.id} />
                       <button type="submit" className="w-full sm:w-auto px-5 py-3 sm:py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 active:bg-green-800 transition-colors font-medium">
-                        ✓ Approve &amp; Send
+                        ✓ 批准并发送
                       </button>
                     </form>
                     <form action={rejectAction} className="flex-1 sm:flex-none">
                       <input type="hidden" name="approvalId" value={item.id} />
                       <button type="submit" className="w-full sm:w-auto px-5 py-3 sm:py-1.5 text-sm border border-red-300 text-red-600 rounded-md hover:bg-red-50 active:bg-red-100 transition-colors">
-                        ✗ Skip
+                        ✗ 跳过
                       </button>
                     </form>
                     <Link href={`/approvals/${item.id}`} className="w-full sm:w-auto text-center px-5 py-3 sm:py-1.5 text-sm border rounded-md hover:bg-accent transition-colors text-muted-foreground">
-                      Edit email
+                      编辑邮件
                     </Link>
                   </div>
                 </CardContent>
@@ -121,8 +128,8 @@ export default async function ApprovalsPage() {
         </div>
       ) : (
         <div className="text-center py-20 text-muted-foreground">
-          <p className="text-lg">No pending approvals</p>
-          <p className="text-sm mt-1">Worker is processing companies — check back in a few minutes</p>
+          <p className="text-lg">暂无待审批事项</p>
+          <p className="text-sm mt-1">后台正在处理客户公司 — 请几分钟后再来查看</p>
         </div>
       )}
     </div>

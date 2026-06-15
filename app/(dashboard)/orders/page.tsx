@@ -3,6 +3,15 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { confirmOrder } from '@/actions/orders'
 
+const STATUS_LABELS: Record<string, string> = {
+  draft:         '草稿',
+  confirmed:     '已确认',
+  in_production: '生产中',
+  shipped:       '已发货',
+  delivered:     '已交付',
+  cancelled:     '已取消',
+}
+
 const STATUS_STYLE: Record<string, string> = {
   draft:         'bg-gray-100 text-gray-700',
   confirmed:     'bg-blue-100 text-blue-700',
@@ -29,21 +38,21 @@ export default async function OrdersPage() {
   return (
     <div className="p-6 max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Orders</h1>
+        <h1 className="text-2xl font-bold">订单</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {confirmed} confirmed · ${totalValue.toLocaleString()} pipeline value
+          {confirmed} 个已确认 · 在途订单金额 ${totalValue.toLocaleString()}
         </p>
       </div>
 
       {(!orders || orders.length === 0) && (
         <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">
-          No orders yet. Create one from a company page after sample approval.
+          暂无订单。样品通过后可在公司详情页创建订单。
         </CardContent></Card>
       )}
 
       {orders && orders.length > 0 && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">All Orders</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">全部订单</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {orders.map((o) => {
               const company = Array.isArray(o.companies) ? o.companies[0] : o.companies
@@ -52,7 +61,7 @@ export default async function OrdersPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLE[o.status]}`}>
-                        {o.status.replace(/_/g, ' ')}
+                        {STATUS_LABELS[o.status] ?? o.status.replace(/_/g, ' ')}
                       </span>
                       {company && (
                         <Link href={`/companies/${o.company_id}`} className="text-sm font-medium text-blue-600 hover:underline">
@@ -65,8 +74,8 @@ export default async function OrdersPage() {
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
-                      {o.order_value_usd ? `$${Number(o.order_value_usd).toLocaleString()}` : 'No value'}
-                      {o.required_delivery ? ` · deliver by ${o.required_delivery}` : ''}
+                      {o.order_value_usd ? `$${Number(o.order_value_usd).toLocaleString()}` : '金额未填'}
+                      {o.required_delivery ? ` · 交期 ${o.required_delivery}` : ''}
                       {o.payment_terms ? ` · ${o.payment_terms}` : ''}
                     </div>
                   </div>
@@ -74,7 +83,7 @@ export default async function OrdersPage() {
                     <form action={confirmOrder}>
                       <input type="hidden" name="orderId" value={o.id} />
                       <button type="submit" className="text-xs px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors whitespace-nowrap shrink-0">
-                        Confirm → production
+                        确认 → 生产
                       </button>
                     </form>
                   )}
