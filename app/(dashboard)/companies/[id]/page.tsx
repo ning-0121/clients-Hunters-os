@@ -222,6 +222,9 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               </form>
             </>
           )}
+          <Link href={`/companies/${id}/outreach`} className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">
+            开发信工作台
+          </Link>
         </div>
       </div>
 
