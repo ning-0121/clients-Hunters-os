@@ -35,12 +35,16 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
-  const isLogin = pathname === '/login' || pathname.startsWith('/login/')
+  // Public auth pages reachable without a session.
+  const PUBLIC = ['/login', '/register', '/forgot', '/reset']
+  const isPublic = PUBLIC.some((p) => pathname === p || pathname.startsWith(p + '/'))
 
-  if (!user && !isLogin) {
+  if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
-  if (user && isLogin) {
+  // Logged-in users skip login/register, but /reset must stay reachable
+  // (password recovery establishes a temporary session).
+  if (user && (pathname === '/login' || pathname === '/register')) {
     return NextResponse.redirect(new URL('/bd/today', request.url))
   }
 

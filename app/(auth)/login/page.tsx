@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -48,7 +49,10 @@ export default function LoginPage() {
             className="w-full text-sm px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50">
             {loading ? '登录中…' : '登录'}
           </button>
-          <p className="text-[11px] text-muted-foreground text-center pt-1">登录后进入 /bd/today 工作台</p>
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
+            <Link href="/register" className="text-primary hover:underline">注册团队账号</Link>
+            <Link href="/forgot" className="text-primary hover:underline">忘记密码？</Link>
+          </div>
         </form>
       </div>
     </div>
