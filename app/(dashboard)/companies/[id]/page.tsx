@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { triggerScoreCompany, triggerEnrichCompany, triggerDraftOutreach } from '@/actions/companies'
 import { triggerTierCompany } from '@/actions/tiering'
+import { triggerCustomsLookup } from '@/actions/customs'
 import { generateReport, createOutreachDraftFromReport, createTaskFromReport } from '@/actions/reports'
 import { createSample } from '@/actions/samples'
 import { createOrder, confirmOrder } from '@/actions/orders'
@@ -680,6 +681,51 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               </CardContent>
             </Card>
           )}
+
+          {/* 海关数据 (ImportYeti via Serper) */}
+          {(() => {
+            const customs = (company.source_raw as Record<string, unknown> | null)?.customs as
+              { importyetiUrl?: string | null; searchUrl?: string; snippets?: string[]; supplierHints?: string[]; checkedAt?: string } | undefined
+            const searchUrl = customs?.searchUrl
+              ?? `https://www.importyeti.com/search?q=${encodeURIComponent(decodeHtml(company.name))}`
+            return (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">海关数据 (ImportYeti)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-xs">
+                  <div className="flex gap-1.5 flex-wrap">
+                    <form action={triggerCustomsLookup}>
+                      <input type="hidden" name="companyId" value={id} />
+                      <button type="submit" className="text-xs px-2.5 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+                        {customs ? '重新查询' : '查海关数据'}
+                      </button>
+                    </form>
+                    <a href={customs?.importyetiUrl ?? searchUrl} target="_blank" rel="noopener noreferrer"
+                      className="text-xs px-2.5 py-1 border rounded-md hover:bg-accent">在 ImportYeti 打开 ↗</a>
+                  </div>
+                  {company.current_supplier_hints && company.current_supplier_hints.length > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">疑似现有供应商：</span>
+                      <div className="flex gap-1 flex-wrap mt-1">
+                        {company.current_supplier_hints.map((s: string) => (
+                          <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {customs?.snippets && customs.snippets.length > 0 ? (
+                    <ul className="space-y-1 text-muted-foreground border-t pt-2">
+                      {customs.snippets.map((s, i) => <li key={i} className="line-clamp-3">{s}</li>)}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground">点「查海关数据」用 Serper 搜 ImportYeti 的进出口记录（谁从该公司进口 / 该公司用哪些工厂）。</p>
+                  )}
+                  {customs?.checkedAt && <p className="text-[10px] text-muted-foreground/70">更新于 {new Date(customs.checkedAt).toLocaleString()}</p>}
+                </CardContent>
+              </Card>
+            )
+          })()}
         </div>
       </div>
     </div>
