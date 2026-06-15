@@ -1,6 +1,8 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { getAppConfig, SEGMENT_LABELS, type DiscoverySegment } from '@/lib/config'
+import { saveAutoDiscoveryConfig } from '@/actions/settings'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,8 @@ function StatCell({ label, value, highlight }: { label: string; value: string | 
 
 export default async function SettingsPage() {
   const supabase = await createServiceClient()
+  const cfg = await getAppConfig()
+  const ALL_SEGMENTS: DiscoverySegment[] = ['overseas', 'domestic', 'recruitment']
 
   const yesterday = new Date(Date.now() - 86_400_000).toISOString()
   const todayStart = new Date()
@@ -123,6 +127,49 @@ export default async function SettingsPage() {
         <h1 className="text-2xl font-bold">设置</h1>
         <p className="text-sm text-muted-foreground mt-1">系统状态与配置</p>
       </div>
+
+      {/* ── Auto-discovery (每日自动获客) ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            自动获客
+            <Badge variant={cfg.autoDiscoveryEnabled ? 'default' : 'secondary'} className="text-xs font-normal">
+              {cfg.autoDiscoveryEnabled ? '已开启' : '已关闭'}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={saveAutoDiscoveryConfig} className="space-y-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="enabled" defaultChecked={cfg.autoDiscoveryEnabled} className="h-4 w-4" />
+              每天自动发现新客户（每天约 9:00 自动运行一次）
+            </label>
+            <div className="text-sm">
+              <label className="text-xs text-muted-foreground block mb-1">每日数量（1–200）</label>
+              <input type="number" name="quota" min={1} max={200} defaultValue={cfg.dailyQuota}
+                className="w-28 px-3 py-1.5 border rounded-md bg-background" />
+              <span className="text-xs text-muted-foreground ml-2">按所选段平均分配</span>
+            </div>
+            <div className="text-sm">
+              <p className="text-xs text-muted-foreground mb-1">目标客户段</p>
+              <div className="space-y-1">
+                {ALL_SEGMENTS.map((s) => (
+                  <label key={s} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="segments" value={s} defaultChecked={cfg.segments.includes(s)} className="h-4 w-4" />
+                    {SEGMENT_LABELS[s]}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+              保存
+            </button>
+            <p className="text-[11px] text-muted-foreground">
+              发现的新客户会自动富集+评分+分级；Apollo / 海关 / 开发信仍为手动。成本随数量上升，建议从 20/天起步。
+            </p>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* ── Factory Profile ── */}
       <Card>
