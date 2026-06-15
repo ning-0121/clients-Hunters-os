@@ -102,7 +102,28 @@ function selectPersonalizationHook(company: Record<string, unknown>): {
 } {
   const name = (company.name as string) ?? 'your brand'
 
-  // 1. Hiring signal (highest priority — timing-based)
+  // 0. Customs / current supplier (STRONGEST — proves we researched them).
+  // From the ImportYeti-via-Serper lookup stored on the company.
+  const customs = (company.source_raw as Record<string, unknown> | null)?.customs as
+    { snippets?: string[] } | undefined
+  const supplierHints = company.current_supplier_hints as string[] | null
+  const customsText = (customs?.snippets ?? []).join(' ')
+  const originMatch = customsText.match(/from\s+([A-Z][a-z]+)/)
+  const origin = originMatch?.[1]
+  const supplier = supplierHints?.[0]
+  if (supplier || origin) {
+    return {
+      hookType: 'customs_supplier',
+      hookText: supplier && origin
+        ? `I noticed ${name} currently imports from ${supplier} out of ${origin} — we run the same activewear categories out of China and could be a strong second source.`
+        : supplier
+        ? `I noticed ${name} works with ${supplier} on production — we specialize in the same activewear lines and could complement or back that up.`
+        : `I saw ${name}'s sourcing is concentrated in ${origin} — worth a quick chat about a flexible China-based activewear source.`,
+      suggestedAngle: 'Position as a strong, flexible second/alternative activewear source vs. their current supplier',
+    }
+  }
+
+  // 1. Hiring signal (timing-based)
   if (company.hiring_signal) {
     const roles = (company.hiring_roles as string[]) ?? []
     const hiringData = { detected: true, roles, urgency: 'high' as const, score: 9 }
@@ -316,26 +337,48 @@ export class OutreachAgent extends BaseAgent {
     const isLatam = country && ['Mexico', 'Colombia', 'Brazil', 'Argentina', 'Peru', 'Chile', 'Venezuela'].includes(country)
     const lang = country === 'Brazil' ? 'pt' : isLatam ? 'es' : 'en'
 
-    const userMessage = `Draft a first-touch outreach email for this prospect.
+    const c = company as unknown as Record<string, unknown>
+    // Real signals collected by ImportYeti / Apollo / tiering — use them precisely.
+    const productMatch = Array.isArray(c.product_match) ? (c.product_match as Array<{ category?: string; suggested_sku?: string; level?: string }>) : []
+    const topMatch = productMatch.find((p) => p.level === 'High') ?? productMatch[0]
+    const suggestedProduct = topMatch?.suggested_sku || topMatch?.category
+    const supplierHints = (c.current_supplier_hints as string[] | null) ?? []
+    const customs = (c.source_raw as Record<string, unknown> | null)?.customs as { snippets?: string[] } | undefined
+    const firstName = contact?.full_name?.trim().split(/\s+/)[0]
+
+    const userMessage = `Draft a first-touch outreach email for this prospect. Make it feel personally researched — weave in the specific facts below; never sound like a template.
 
 COMPANY: ${company.name}
 Website: ${company.website ?? 'N/A'}
 Country: ${country ?? 'unknown'}
-Instagram: @${(company as unknown as Record<string, unknown>).instagram_handle ?? 'N/A'} (${(company as unknown as Record<string, unknown>).instagram_followers ?? 0} followers)
-TikTok: @${(company as unknown as Record<string, unknown>).tiktok_handle ?? 'N/A'} (${(company as unknown as Record<string, unknown>).tiktok_followers ?? 0} followers)
-Price point: ${(company as unknown as Record<string, unknown>).price_point ?? 'unknown'}
 Categories: ${company.product_categories?.join(', ') ?? 'unknown'}
+Price point: ${c.price_point ?? 'unknown'}
+Customer tier (our assessment): ${c.customer_tier ?? 'unscored'}
 Description: ${company.description ?? 'N/A'}
 
-CONTACT: ${contact?.full_name ?? 'Founder/Buyer'}
+DECISION-MAKER (address them personally if a real name is given):
+Name: ${contact?.full_name ?? 'unknown — use a role-appropriate greeting, no fake name'}
+First name: ${firstName ?? 'N/A'}
 Title: ${contact?.title ?? 'unknown'}
 
-PERSONALIZATION HOOK (use this as your opening sentence, don't rewrite it):
+CURRENT SUPPLIER / CUSTOMS INTEL (real — reference it naturally if present, shows we did our homework):
+Suspected current supplier(s): ${supplierHints.length ? supplierHints.join(', ') : 'unknown'}
+Customs notes: ${(customs?.snippets ?? []).join(' | ').slice(0, 300) || 'none'}
+
+BEST PRODUCT TO PITCH (lead with this specific product, not a generic catalog):
+${suggestedProduct ?? 'their core activewear category'}${topMatch?.level ? ` (match: ${topMatch.level})` : ''}
+
+PERSONALIZATION HOOK (use as your opening sentence, don't rewrite it):
 "${hook.hookText}"
 
 SUGGESTED ANGLE: ${hook.suggestedAngle}
 RECOMMENDED STRATEGY: ${strategy ?? 'Focus on small MOQ and fast turnaround'}
 LANGUAGE: ${lang}
+
+EXTRA RULES:
+- If a real decision-maker first name is given, greet them by it ("Hi ${firstName ?? '...'},"). Otherwise no fabricated name.
+- If a current supplier / customs intel is given, reference it specifically — that's the most persuasive proof you researched them.
+- Pitch the ONE specific product above, not a generic "we make activewear".
 
 Return JSON:
 {
