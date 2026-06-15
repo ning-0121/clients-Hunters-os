@@ -33,6 +33,13 @@ export function apolloConfigured(): boolean {
   return !!process.env.APOLLO_API_KEY
 }
 
+/**
+ * Two-step Apollo flow (required on Basic plan):
+ *   1. mixed_people/api_search → candidates (id + first_name + title, PII masked)
+ *   2. people/match by id      → reveal full name + LinkedIn + verified email
+ *
+ * Step 2 costs ~1 credit per person, so `limit` caps how many we reveal.
+ */
 export async function apolloFindContacts(params: {
   domain?: string | null
   titles?: string[]
@@ -40,16 +47,18 @@ export async function apolloFindContacts(params: {
 }): Promise<ApolloContact[]> {
   const key = process.env.APOLLO_API_KEY
   if (!key || !params.domain) return []
+  const limit = params.limit ?? 5
 
   try {
-    const res = await fetch(`${APOLLO_BASE}/mixed_people/search`, {
+    // 1. Search — find who exists (cheap; returns Apollo person ids).
+    const res = await fetch(`${APOLLO_BASE}/mixed_people/api_search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'X-Api-Key': key },
       body: JSON.stringify({
         q_organization_domains: params.domain,
         person_titles: params.titles ?? APOLLO_TARGET_TITLES,
         page: 1,
-        per_page: params.limit ?? 8,
+        per_page: Math.max(limit, 10),
       }),
       signal: AbortSignal.timeout(12000),
     })
@@ -57,20 +66,41 @@ export async function apolloFindContacts(params: {
       console.error(`[Apollo] search failed: ${res.status}`)
       return []
     }
-    const data = await res.json() as { people?: ApolloRaw[]; contacts?: ApolloRaw[] }
-    const people = data.people ?? data.contacts ?? []
-    return people
-      .map(toContact)
-      .filter((c) => c.fullName.length > 1)
+    const data = await res.json() as { people?: ApolloRaw[] }
+    const ids = (data.people ?? [])
+      .filter((p) => p.id && (p.title ?? '').length > 0)
+      .slice(0, limit)
+      .map((p) => p.id as string)
+    if (ids.length === 0) return []
+
+    // 2. Reveal each candidate by id (parallel; 1 credit each).
+    const revealed = await Promise.all(ids.map((id) => apolloMatch(id, key)))
+    return revealed.filter((c): c is ApolloContact => !!c && c.fullName.length > 1)
   } catch (err) {
     console.error('[Apollo] error:', err)
     return []
   }
 }
 
+async function apolloMatch(id: string, key: string): Promise<ApolloContact | null> {
+  try {
+    const res = await fetch(`${APOLLO_BASE}/people/match`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'X-Api-Key': key },
+      body: JSON.stringify({ id, reveal_personal_emails: false }),
+      signal: AbortSignal.timeout(12000),
+    })
+    if (!res.ok) return null
+    const data = await res.json() as { person?: ApolloRaw }
+    return data.person ? toContact(data.person) : null
+  } catch {
+    return null
+  }
+}
+
 interface ApolloRaw {
-  first_name?: string; last_name?: string; name?: string; title?: string
-  linkedin_url?: string; email?: string; seniority?: string
+  id?: string; first_name?: string; last_name?: string; name?: string; title?: string
+  linkedin_url?: string; email?: string; email_status?: string; seniority?: string
 }
 
 function toContact(p: ApolloRaw): ApolloContact {
