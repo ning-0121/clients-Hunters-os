@@ -46,6 +46,13 @@ const DISCOVERY_PRESETS = [
     icon: '🇨🇳',
     params: { searchMode: 'targeted', targetType: 'domestic_trade', maxLeads: 20 },
   },
+  {
+    id: 'recruitment',
+    label: '招聘信号线索（正在扩张）',
+    description: '搜 BOSS/猎聘 上招「外贸跟单/业务员」的服装公司 — 正在扩张 = 开发时机最佳',
+    icon: '📈',
+    params: { searchMode: 'targeted', targetType: 'recruitment', maxLeads: 20 },
+  },
 ]
 
 export default async function DiscoveryPage() {

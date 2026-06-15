@@ -35,3 +35,15 @@ export async function triggerCustomsLookup(formData: FormData): Promise<void> {
 
   revalidatePath(`/companies/${companyId}`)
 }
+
+/** Save a salesperson's manual customs note (e.g. what they read on ImportYeti). */
+export async function saveCustomsNotes(formData: FormData): Promise<void> {
+  const companyId = formData.get('companyId') as string
+  const notes = (formData.get('notes') as string ?? '').slice(0, 2000)
+  if (!companyId) return
+  const sb = await createServiceClient()
+  const { data: c } = await sb.from('companies').select('source_raw').eq('id', companyId).single()
+  const sourceRaw = { ...((c?.source_raw as Record<string, unknown>) ?? {}), customs_notes: notes }
+  await sb.from('companies').update({ source_raw: sourceRaw, updated_at: new Date().toISOString() }).eq('id', companyId)
+  revalidatePath(`/companies/${companyId}`)
+}

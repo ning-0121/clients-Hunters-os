@@ -149,6 +149,23 @@ const DOMESTIC_SKIP = [
   'qcc.com', 'tianyancha.com', 'gov.cn',
 ]
 
+// ── Recruitment-signal lead discovery (BOSS alternative via Serper) ──────────
+// Companies hiring 外贸跟单/业务员 are expanding → good domestic trade-company leads.
+const QUERIES_RECRUITMENT = [
+  'site:zhipin.com 服装 外贸 跟单',
+  'site:zhipin.com 运动服 外贸 业务员',
+  'site:zhipin.com 瑜伽服 外贸',
+  'site:liepin.com 服装外贸 跟单',
+  'site:liepin.com 外贸 业务员 服装',
+  '义乌 服装 外贸 招聘 跟单',
+  '杭州 运动服 外贸 招聘 业务员',
+  '广州 服装外贸 招聘 跟单',
+  '宁波 服装 外贸 招聘 跟单',
+  '深圳 服装 外贸 招聘 业务员',
+]
+
+const CN_REGIONS = ['义乌', '杭州', '宁波', '广州', '深圳', '上海', '温州', '泉州', '青岛', '苏州', '南通', '东莞', '佛山', '福州', '厦门']
+
 // ── All queries by segment ───────────────────────────────────────────────────
 const ALL_QUERIES_MAP: Record<string, string[]> = {
   dtc_core:       QUERIES_DTC_CORE,
@@ -172,6 +189,7 @@ const TYPE_QUERIES: Record<string, string[]> = {
   press_funding:    QUERIES_SIGNALS,
   international:    QUERIES_INTL,
   domestic_trade:   QUERIES_DOMESTIC,
+  recruitment:      QUERIES_RECRUITMENT,
 }
 
 // Quick mode: 8 highest-signal queries
@@ -219,6 +237,7 @@ export class DiscoveryAgent extends BaseAgent {
 
   async execute(context: AgentContext, input: DiscoveryInput): Promise<AgentResult> {
     if (input.targetType === 'domestic_trade') return this.runDomestic(input)
+    if (input.targetType === 'recruitment') return this.runRecruitment(input)
 
     const startTime = Date.now()
     const maxLeads = input.maxLeads ?? 20
@@ -477,6 +496,75 @@ export class DiscoveryAgent extends BaseAgent {
     return { success: true, data: { queriesRun: queries.length, rawResults: allResults.length, qualified: saved, saved } }
   }
 
+  /** Recruitment-signal lead discovery — find domestic trade companies that are hiring. */
+  private async runRecruitment(input: DiscoveryInput): Promise<AgentResult> {
+    const startTime = Date.now()
+    const maxLeads = input.maxLeads ?? 20
+    const supabase = await createServiceClient()
+
+    await this.logAction({
+      actionType: 'discovery_start',
+      inputData: { ...input, segment: 'recruitment' } as unknown as Record<string, unknown>,
+      status: 'running',
+    })
+
+    const queries = input.customQuery ? [input.customQuery]
+      : input.searchMode === 'quick' ? QUERIES_RECRUITMENT.slice(0, 5)
+      : QUERIES_RECRUITMENT
+
+    const allResults: Array<{ title: string; link: string; snippet: string; domain: string }> = []
+    for (let i = 0; i < queries.length; i += 3) {
+      const batchResults = await Promise.allSettled(queries.slice(i, i + 3).map((q) => googleSearch(q, 10)))
+      batchResults.forEach((r) => { if (r.status === 'fulfilled') allResults.push(...r.value) })
+      if (allResults.length >= maxLeads * 5) break
+    }
+
+    // Extract company names from the job-posting titles/snippets.
+    const seen = new Set<string>()
+    const candidates: { name: string; region: string; signal: string; url: string }[] = []
+    for (const r of allResults) {
+      const blob = `${decodeHtml(r.title)} ${decodeHtml(r.snippet)}`
+      const name = extractCnCompanyName(blob)
+      if (!name || seen.has(name)) continue
+      seen.add(name)
+      candidates.push({ name, region: extractCnRegion(blob), signal: decodeHtml(r.title).slice(0, 120), url: r.link })
+    }
+
+    // Skip names already in the DB.
+    const { data: existing } = await supabase.from('companies').select('name').in('name', candidates.map((c) => c.name))
+    const existingNames = new Set((existing ?? []).map((e) => e.name))
+
+    let saved = 0
+    for (const c of candidates) {
+      if (saved >= maxLeads) break
+      if (existingNames.has(c.name)) continue
+      const { data, error } = await supabase.from('companies').insert({
+        name:                    c.name,
+        country:                 'China',
+        source:                  'recruitment_serper',
+        source_url:              c.url,
+        status:                  'raw',
+        target_customer_segment: 'domestic_trading_company',
+        domestic_region:         c.region || null,
+        description:             `招聘信号（正在扩张/招人）：${c.signal}`,
+        recruitment_signals:     [c.signal],
+      }).select('id').single()
+      if (!error && data?.id) {
+        await this.enqueueJob('score_domestic', { companyId: data.id }, 4)
+        saved++
+      }
+    }
+
+    await this.logAction({
+      actionType: 'discovery_complete',
+      inputData: { ...input, segment: 'recruitment' } as unknown as Record<string, unknown>,
+      outputData: { queriesRun: queries.length, rawResults: allResults.length, candidates: candidates.length, saved },
+      status: 'completed', durationMs: Date.now() - startTime,
+    })
+
+    return { success: true, data: { queriesRun: queries.length, rawResults: allResults.length, qualified: saved, saved } }
+  }
+
   private buildQueries(input: DiscoveryInput): string[] {
     // Explicit type override
     if (input.targetType && TYPE_QUERIES[input.targetType]) {
@@ -506,6 +594,33 @@ export class DiscoveryAgent extends BaseAgent {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Extract a Chinese company name from a job-posting title/snippet.
+ *
+ * BOSS hides employer names, so most snippets yield noise. We keep only names
+ * with a STRONG legal suffix (有限公司 …) AND that mention a trade hub or an
+ * apparel/trade keyword — which filters out generic phrases like "维护和开发公司"
+ * or "某上海…公司". Fewer leads, but real ones.
+ */
+const APPAREL_TRADE_KW = /服饰|服装|纺织|针织|针纺|内衣|贸易|外贸|进出口|实业|运动|制衣|时尚|国际/
+const BAD_PREFIX = /^(某|我[们們]|这[家个]|該|该|一[间間]|本|贵|某某)/
+
+function extractCnCompanyName(text: string): string | null {
+  const re = /([一-鿿]{2,16}(?:股份有限公司|有限责任公司|有限公司|进出口公司|贸易公司|实业公司|服饰有限公司))/g
+  const matches = [...text.matchAll(re)]
+    .map((m) => m[1].trim())
+    .filter((n) => n.length >= 6 && !BAD_PREFIX.test(n) &&
+      (APPAREL_TRADE_KW.test(n) || CN_REGIONS.some((r) => n.includes(r))))
+  if (!matches.length) return null
+  const pref = matches.find((n) => APPAREL_TRADE_KW.test(n))
+  return pref ?? matches.sort((a, b) => b.length - a.length)[0]
+}
+
+/** Detect a Chinese trade-hub region mentioned in the text. */
+function extractCnRegion(text: string): string {
+  return CN_REGIONS.find((r) => text.includes(r)) ?? ''
+}
 
 function detectCountry(domain: string, text: string): string | null {
   if (domain.endsWith('.br'))    return 'Brazil'

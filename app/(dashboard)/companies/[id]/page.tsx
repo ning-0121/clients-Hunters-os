@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { triggerScoreCompany, triggerEnrichCompany, triggerDraftOutreach } from '@/actions/companies'
 import { triggerTierCompany } from '@/actions/tiering'
-import { triggerCustomsLookup } from '@/actions/customs'
+import { triggerCustomsLookup, saveCustomsNotes } from '@/actions/customs'
 import { generateReport, createOutreachDraftFromReport, createTaskFromReport } from '@/actions/reports'
 import { createSample } from '@/actions/samples'
 import { createOrder, confirmOrder } from '@/actions/orders'
@@ -722,6 +722,13 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                     <p className="text-muted-foreground">点「查海关数据」用 Serper 搜 ImportYeti 的进出口记录（谁从该公司进口 / 该公司用哪些工厂）。</p>
                   )}
                   {customs?.checkedAt && <p className="text-[10px] text-muted-foreground/70">更新于 {new Date(customs.checkedAt).toLocaleString()}</p>}
+                  <form action={saveCustomsNotes} className="border-t pt-2 space-y-1">
+                    <input type="hidden" name="companyId" value={id} />
+                    <textarea name="notes" rows={2} placeholder="海关备注（看完 ImportYeti 手动记录：现供应商、走货量、切入点…）"
+                      defaultValue={(company.source_raw as Record<string, unknown> | null)?.customs_notes as string ?? ''}
+                      className="w-full text-[11px] px-2 py-1.5 border rounded-md bg-background" />
+                    <button type="submit" className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent">保存备注</button>
+                  </form>
                 </CardContent>
               </Card>
             )
