@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { triggerScoreCompany, triggerEnrichCompany, triggerDraftOutreach } from '@/actions/companies'
 import { triggerTierCompany } from '@/actions/tiering'
 import { triggerCustomsLookup, saveCustomsNotes } from '@/actions/customs'
+import { triggerApolloLookup } from '@/actions/apollo'
 import { generateReport, createOutreachDraftFromReport, createTaskFromReport } from '@/actions/reports'
 import { createSample } from '@/actions/samples'
 import { createOrder, confirmOrder } from '@/actions/orders'
@@ -587,10 +588,20 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
         <div className="space-y-4">
           {/* Contacts */}
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">联系人</CardTitle>
+              <form action={triggerApolloLookup}>
+                <input type="hidden" name="companyId" value={id} />
+                <button type="submit" className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent">用 Apollo 查决策人</button>
+              </form>
             </CardHeader>
             <CardContent className="space-y-3">
+              {(() => {
+                const ap = (company.source_raw as Record<string, unknown> | null)?.apollo as { error?: string; found?: number; saved?: number } | undefined
+                if (ap?.error) return <p className="text-[11px] text-amber-700">⚠ {ap.error}（去 /settings 或让管理员配置后重试）</p>
+                if (ap && typeof ap.found === 'number') return <p className="text-[11px] text-muted-foreground">Apollo：找到 {ap.found} 人，新增 {ap.saved}。</p>
+                return null
+              })()}
               {contacts && contacts.length > 0 ? contacts.map((contact) => (
                 <div key={contact.id} className="border-b last:border-0 pb-3 last:pb-0">
                   <div className="font-medium text-sm">{contact.full_name ?? 'Unknown'}</div>
