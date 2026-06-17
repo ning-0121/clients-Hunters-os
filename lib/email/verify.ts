@@ -5,6 +5,8 @@
  */
 export interface EmailVerifyResult {
   status: string        // deliverable | undeliverable | risky | unknown | unverified | error
+  hunterStatus?: string // valid | invalid | accept_all | webmail | disposable | unknown
+  score?: number        // 0–100 confidence from Hunter
   block: boolean        // true only when confirmed undeliverable
 }
 
@@ -17,9 +19,14 @@ export async function verifyEmail(email: string): Promise<EmailVerifyResult> {
     url.searchParams.set('api_key', key)
     const res = await fetch(url, { signal: AbortSignal.timeout(12000) })
     if (!res.ok) return { status: `http_${res.status}`, block: false }
-    const data = await res.json() as { data?: { result?: string; status?: string } }
-    const result = data?.data?.result ?? data?.data?.status ?? 'unknown'
-    return { status: result, block: result === 'undeliverable' }
+    const data = await res.json() as { data?: { result?: string; status?: string; score?: number } }
+    const result = data?.data?.result ?? 'unknown'
+    return {
+      status: result,
+      hunterStatus: data?.data?.status,
+      score: data?.data?.score,
+      block: result === 'undeliverable',
+    }
   } catch {
     return { status: 'error', block: false }
   }

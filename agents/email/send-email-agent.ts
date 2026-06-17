@@ -6,7 +6,7 @@ import { BaseAgent, type AgentContext, type AgentResult } from '@/agents/base-ag
 import { createServiceClient } from '@/lib/supabase/server'
 import { sendGmail, isGmailConfigured } from '@/lib/email/gmail'
 import { checkSendThrottle, recordSend } from '@/lib/email/throttle'
-import { verifyEmail } from '@/lib/email/verify'
+import { resolveSendableEmail } from '@/lib/email/resolve'
 
 interface SendEmailInput {
   outreachLogId: string
@@ -42,8 +42,8 @@ export class SendEmailAgent extends BaseAgent {
       .from('outreach_logs')
       .select(`
         *,
-        contacts(full_name, email, title),
-        companies(name)
+        contacts(full_name, first_name, last_name, email, email_source, email_confidence, title),
+        companies(name, website)
       `)
       .eq('id', outreachLogId)
       .single()
@@ -59,29 +59,38 @@ export class SendEmailAgent extends BaseAgent {
       return { success: false, error: 'No subject/body found in outreach log' }
     }
 
-    const contact     = Array.isArray(log.contacts) ? log.contacts[0] : log.contacts
-    const company     = Array.isArray(log.companies) ? log.companies[0] : log.companies
-    const recipientEmail = (contact as Record<string, unknown>)?.email as string | undefined
-    const recipientName  = (contact as Record<string, unknown>)?.full_name as string | undefined
-    const companyName    = (company as Record<string, unknown>)?.name as string | undefined
+    const contact     = (Array.isArray(log.contacts) ? log.contacts[0] : log.contacts) as Record<string, unknown> | null
+    const company     = (Array.isArray(log.companies) ? log.companies[0] : log.companies) as Record<string, unknown> | null
+    const recipientName  = contact?.full_name as string | undefined
+    const companyName    = company?.name as string | undefined
 
-    // Guard: no recipient = abort (don't silently log as sent)
-    if (!recipientEmail) {
-      return { success: false, error: `No email address found for contact on outreach log ${outreachLogId}` }
-    }
+    // 1b. Resolve a SENDABLE email — verify what we have, try to find a better
+    // address, and refuse to send to unconfirmed guesses (stops bounces).
+    const resolved = await resolveSendableEmail({
+      contactId: log.contact_id,
+      email: contact?.email as string | undefined,
+      source: contact?.email_source as string | undefined,
+      confidence: contact?.email_confidence as number | undefined,
+      firstName: contact?.first_name as string | undefined,
+      lastName: contact?.last_name as string | undefined,
+      fullName: contact?.full_name as string | undefined,
+      website: company?.website as string | undefined,
+    })
 
-    // 1b. Verify deliverability — never send to a confirmed-bad address.
-    const verify = await verifyEmail(recipientEmail)
-    if (verify.block) {
+    if (!resolved.sendable || !resolved.email) {
       await supabase.from('outreach_logs').update({
         status: 'failed',
-        personalization_data: { ...((log.personalization_data as Record<string, unknown>) ?? {}), email_verify: verify.status },
+        personalization_data: { ...((log.personalization_data as Record<string, unknown>) ?? {}), email_verify: resolved.status, email_reason: resolved.reason },
       }).eq('id', outreachLogId)
-      if (log.contact_id) {
-        await supabase.from('contacts').update({ email_deliverable: false }).eq('id', log.contact_id)
-      }
-      return { success: false, error: `邮箱不可达（${verify.status}），已拦截未发送：${recipientEmail}` }
+      await this.logAction({
+        companyId: log.company_id, contactId: log.contact_id, actionType: 'send_email',
+        inputData: { outreachLogId }, outputData: { blocked: true, status: resolved.status, reason: resolved.reason },
+        status: 'failed', errorMessage: resolved.reason,
+      })
+      return { success: false, error: `未发送 — ${resolved.reason}` }
     }
+
+    const recipientEmail = resolved.email
 
     // 2. Send
     let sendResult: { success: boolean; method: string; messageId?: string; error?: string }

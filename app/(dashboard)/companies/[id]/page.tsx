@@ -7,6 +7,7 @@ import { triggerScoreCompany, triggerEnrichCompany } from '@/actions/companies'
 import { triggerTierCompany } from '@/actions/tiering'
 import { triggerCustomsLookup, saveCustomsNotes } from '@/actions/customs'
 import { triggerApolloLookup } from '@/actions/apollo'
+import { verifyContactEmails } from '@/actions/email'
 import { generateReport, createTaskFromReport } from '@/actions/reports'
 import { createSample } from '@/actions/samples'
 import { createOrder, confirmOrder } from '@/actions/orders'
@@ -602,10 +603,16 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">联系人</CardTitle>
-              <form action={triggerApolloLookup}>
-                <input type="hidden" name="companyId" value={id} />
-                <button type="submit" className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent">用 Apollo 查决策人</button>
-              </form>
+              <div className="flex gap-1.5">
+                <form action={triggerApolloLookup}>
+                  <input type="hidden" name="companyId" value={id} />
+                  <button type="submit" className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent">用 Apollo 查决策人</button>
+                </form>
+                <form action={verifyContactEmails}>
+                  <input type="hidden" name="companyId" value={id} />
+                  <button type="submit" className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent">验证邮箱</button>
+                </form>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {(() => {
@@ -618,10 +625,19 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                 <div key={contact.id} className="border-b last:border-0 pb-3 last:pb-0">
                   <div className="font-medium text-sm">{contact.full_name ?? 'Unknown'}</div>
                   <div className="text-xs text-muted-foreground">{contact.title}</div>
-                  {contact.email && (
-                    <a href={`mailto:${contact.email}`} className="text-xs text-blue-600 hover:underline block mt-0.5">
-                      {contact.email}
-                    </a>
+                  {contact.email ? (
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <a href={`mailto:${contact.email}`} className={`text-xs hover:underline ${contact.email_deliverable === false ? 'text-muted-foreground line-through' : 'text-blue-600'}`}>
+                        {contact.email}
+                      </a>
+                      {contact.email_verified
+                        ? <span className="text-[10px] px-1 rounded bg-green-100 text-green-700">✓已验证</span>
+                        : contact.email_deliverable === false
+                          ? <span className="text-[10px] px-1 rounded bg-red-100 text-red-700">✗不可达</span>
+                          : <span className="text-[10px] px-1 rounded bg-amber-100 text-amber-700">未验证</span>}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-amber-700 mt-0.5">⚠ 无邮箱 — 点「验证邮箱」尝试查找</div>
                   )}
                   {contact.linkedin_url && (
                     <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline block">
