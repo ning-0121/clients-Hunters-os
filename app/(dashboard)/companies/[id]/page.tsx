@@ -8,6 +8,7 @@ import { triggerTierCompany } from '@/actions/tiering'
 import { triggerCustomsLookup, saveCustomsNotes } from '@/actions/customs'
 import { triggerApolloLookup } from '@/actions/apollo'
 import { verifyContactEmails } from '@/actions/email'
+import { flagCompanyData, clearCompanyFlag } from '@/actions/data-quality'
 import { generateReport, createTaskFromReport } from '@/actions/reports'
 import { createSample } from '@/actions/samples'
 import { createOrder, confirmOrder } from '@/actions/orders'
@@ -237,6 +238,34 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           </Link>
         </div>
       </div>
+
+      {/* Data-quality flag banner / report control */}
+      {company.data_flag ? (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+          <span className="text-sm text-amber-800">
+            ⚠ 已报错：{company.data_flag === 'bad_info' ? '客户信息有误' : '联系方式有误'}
+            {company.data_flag_note ? ` —— ${company.data_flag_note}` : ''}
+            <span className="text-amber-600 text-xs ml-2">（{company.data_flag_by ?? ''} · 已排队重新富集自纠）</span>
+          </span>
+          <form action={clearCompanyFlag}>
+            <input type="hidden" name="companyId" value={id} />
+            <button className="text-xs px-2 py-1 border border-amber-400 rounded-md hover:bg-amber-100 shrink-0">标记已解决</button>
+          </form>
+        </div>
+      ) : (
+        <details className="mb-6">
+          <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">⚐ 信息或联系方式有误？点此报错（系统会自动重查）</summary>
+          <form action={flagCompanyData} className="mt-2 flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+            <input type="hidden" name="companyId" value={id} />
+            <select name="kind" className="text-xs px-2 py-1 border rounded-md bg-background">
+              <option value="bad_contact">联系方式有误</option>
+              <option value="bad_info">客户信息有误</option>
+            </select>
+            <input name="note" placeholder="说明（可选）" className="text-xs px-2 py-1 border rounded-md bg-background flex-1 min-w-[180px]" />
+            <button className="text-xs px-3 py-1 border rounded-md hover:bg-accent">提交报错并重查</button>
+          </form>
+        </details>
+      )}
 
       <div className="grid grid-cols-3 gap-4">
         {/* Left column: Company Info */}

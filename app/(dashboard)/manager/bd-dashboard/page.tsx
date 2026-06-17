@@ -17,7 +17,7 @@ export default async function ManagerBdDashboard() {
     { data: companies }, { data: tasks }, { data: replies }, { data: reports }, { data: outreach },
     { count: orderCount }, { count: sampleCount },
   ] = await Promise.all([
-    sb.from('companies').select('id, name, customer_tier, target_customer_segment, domestic_company_type, recommended_factory_type, recommended_factory_id, compliance_level, compliance_blockers, assigned_to, status').limit(3000),
+    sb.from('companies').select('id, name, customer_tier, target_customer_segment, domestic_company_type, recommended_factory_type, recommended_factory_id, compliance_level, compliance_blockers, assigned_to, status, data_flag').limit(3000),
     sb.from('tasks').select('id, company_id, assigned_to, task_type, status, due_at, completed_at, reply_event_id').limit(3000),
     sb.from('reply_events').select('id, company_id, reply_sentiment, reply_intent, received_at').limit(2000),
     sb.from('customer_intelligence_reports').select('company_id').limit(3000),
@@ -87,8 +87,10 @@ export default async function ManagerBdDashboard() {
   const positiveUnhandled = R.filter((r) => (r.reply_sentiment === 'positive' || r.reply_intent?.includes('quote') || r.reply_intent?.includes('sample')) && new Date(r.received_at).toISOString() < dayAgo && !handledReplyTasks.has(r.id))
   const overdueQuoteSample = overdueTasks.filter((t) => t.task_type === 'quote_followup' || t.task_type === 'sample_followup')
   const highValueNoOwner = C.filter((c) => (c.customer_tier === 'A' || c.customer_tier === 'B') && !c.assigned_to && c.status !== 'closed_lost')
+  const dataFlagged = C.filter((c) => !!c.data_flag)
 
   const alerts: { label: string; items: { id: string; name?: string }[] }[] = [
+    { label: '信息/联系方式被报错（重查中）', items: dataFlagged.map((c) => ({ id: c.id, name: c.name })) },
     { label: 'A 级客户缺少报告', items: aMissingReport.map((c) => ({ id: c.id, name: c.name })) },
     { label: '需 SMETA 但未匹配合作工厂', items: smetaNoPartner.map((c) => ({ id: c.id, name: c.name })) },
     { label: '正面回复 24h 未处理', items: positiveUnhandled.map((r) => ({ id: r.company_id ?? r.id, name: undefined })) },

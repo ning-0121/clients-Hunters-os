@@ -9,6 +9,7 @@ import {
 import { completeTask, draftReply } from '@/actions/tasks'
 import { snoozeTask, assignLeadToMe, createQuoteTask, createSampleTask, scheduleFollowup, closeReply, rejectLead } from '@/actions/bd'
 import { generateReport } from '@/actions/reports'
+import { flagCompanyData } from '@/actions/data-quality'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,7 @@ export default async function BdTodayPage() {
       .order('priority', { ascending: true }).order('due_at', { ascending: true }).limit(25),
     sb.from('outreach_logs').select('id, company_id, subject, created_at, companies(name)')
       .eq('status', 'pending_approval').order('created_at', { ascending: false }).limit(10),
-    sb.from('companies').select('id, name, description, country, region, customer_tier, target_customer_segment, recommended_development_strategy, compliance_level, compliance_blockers, recommended_factory_type, next_action, product_match, assigned_to, status')
+    sb.from('companies').select('id, name, description, country, region, city, website, instagram_handle, tiktok_handle, linkedin_url, data_flag, customer_tier, target_customer_segment, recommended_development_strategy, compliance_level, compliance_blockers, recommended_factory_type, next_action, product_match, assigned_to, status')
       .eq('assigned_to', who).in('customer_tier', ['A', 'B', 'C']).neq('status', 'closed_lost').neq('status', 'closed_won')
       .order('customer_tier', { ascending: true }).order('total_score', { ascending: false }).limit(30),
     sb.from('reply_events').select('id, company_id, from_email, reply_subject, reply_body, reply_intent, reply_sentiment, received_at, companies(name)')
@@ -173,6 +174,16 @@ export default async function BdTodayPage() {
               )}
               {/* 4. 联系人 + 联系方式 */}
               <div className="text-[11px] border-t pt-1.5">
+                {/* 公司渠道：网址 / 地区 / 社媒 */}
+                {(() => {
+                  const channels: React.ReactNode[] = []
+                  if (c.website) channels.push(<a key="w" href={String(c.website)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">网站</a>)
+                  if (c.city || c.country || c.region) channels.push(<span key="loc">📍 {[c.city, c.country ?? c.region].filter(Boolean).join(', ')}</span>)
+                  if (c.instagram_handle) channels.push(<a key="ig" href={`https://instagram.com/${String(c.instagram_handle).replace(/^@/, '')}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">IG</a>)
+                  if (c.tiktok_handle) channels.push(<a key="tt" href={`https://tiktok.com/@${String(c.tiktok_handle).replace(/^@/, '')}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">TikTok</a>)
+                  if (c.linkedin_url) channels.push(<a key="li" href={String(c.linkedin_url)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">公司LinkedIn</a>)
+                  return channels.length ? <div className="flex gap-2 flex-wrap text-muted-foreground mb-1">{channels.map((n, i) => <span key={i}>{n}</span>)}</div> : null
+                })()}
                 {ct ? (
                   <div className="space-y-0.5">
                     <div><span className="text-muted-foreground">联系人：</span>{(ct.full_name as string) || '（仅职位）'} {ct.title ? `· ${ct.title}` : ''}</div>
@@ -194,6 +205,9 @@ export default async function BdTodayPage() {
                 <Link href={`/companies/${c.id}/report`} className="text-xs px-2 py-1 border rounded-md">看报告</Link>
                 <Link href={`/companies/${c.id}/outreach`} className="text-xs px-2 py-1 border rounded-md">生成开发信</Link>
                 {c.assigned_to !== who && <form action={assignLeadToMe}><input type="hidden" name="companyId" value={c.id} /><button className="text-xs px-2 py-1 border rounded-md">分配给我</button></form>}
+                {c.data_flag
+                  ? <span className="text-xs px-2 py-1 text-amber-700">⚠ 已报错·重查中</span>
+                  : <form action={flagCompanyData}><input type="hidden" name="companyId" value={c.id} /><input type="hidden" name="kind" value="bad_contact" /><button className="text-xs px-2 py-1 border rounded-md text-muted-foreground">报错</button></form>}
                 <form action={rejectLead}><input type="hidden" name="companyId" value={c.id} /><button className="text-xs px-2 py-1 border rounded-md text-muted-foreground">放弃</button></form>
               </div>
             </CardContent></Card>
