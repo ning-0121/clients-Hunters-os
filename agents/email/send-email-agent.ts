@@ -43,7 +43,7 @@ export class SendEmailAgent extends BaseAgent {
       .select(`
         *,
         contacts(full_name, first_name, last_name, email, email_source, email_confidence, title),
-        companies(name, website)
+        companies(name, website, assigned_to)
       `)
       .eq('id', outreachLogId)
       .single()
@@ -95,14 +95,25 @@ export class SendEmailAgent extends BaseAgent {
     // 2. Send
     let sendResult: { success: boolean; method: string; messageId?: string; error?: string }
 
-    if (isGmailConfigured() && recipientEmail) {
+    // Prefer the assigned salesperson's own mailbox, fall back to the global one.
+    const owner = company?.assigned_to as string | undefined
+    let sender: import('@/lib/email/gmail').SenderCreds | null = null
+    if (owner) {
+      const { data: es } = await supabase.from('user_email_settings')
+        .select('from_name, sender_email, smtp_host, smtp_port, app_password, active').eq('owner', owner).maybeSingle()
+      if (es && es.active && es.sender_email && es.app_password) {
+        sender = { fromName: es.from_name ?? undefined, fromEmail: es.sender_email, appPassword: es.app_password, smtpHost: es.smtp_host, smtpPort: es.smtp_port }
+      }
+    }
+
+    if ((isGmailConfigured() || sender) && recipientEmail) {
       const gmailResult = await sendGmail({
         to: recipientEmail,
         toName: recipientName ?? undefined,
         subject,
         body,
-      })
-      sendResult = { ...gmailResult, method: 'gmail' }
+      }, sender)
+      sendResult = { ...gmailResult, method: sender ? 'smtp_user' : 'gmail' }
     } else {
       sendResult = await this.simulateSend({ to: recipientEmail, toName: recipientName, subject, body, companyName })
     }

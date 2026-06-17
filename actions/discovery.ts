@@ -35,5 +35,7 @@ export async function triggerDiscovery(formData: FormData): Promise<void> {
     priority: 4,
   })
 
-  redirect('/leads?discovery=queued')
+  // Stay on the discovery page with a confirmation — bouncing to /leads made it
+  // feel like a loop ("无法新建线索"). Results appear under 最近的发现任务.
+  redirect('/leads/discovery?queued=1')
 }

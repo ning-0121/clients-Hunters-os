@@ -55,7 +55,8 @@ const DISCOVERY_PRESETS = [
   },
 ]
 
-export default async function DiscoveryPage() {
+export default async function DiscoveryPage({ searchParams }: { searchParams: Promise<{ queued?: string }> }) {
+  const sp = await searchParams
   const supabase = await createClient()
 
   const { data: recentJobs } = await supabase
@@ -85,7 +86,34 @@ export default async function DiscoveryPage() {
         )}
       </div>
 
-      {/* Discovery Presets */}
+      {sp.queued === '1' && (
+        <div className="mb-6 rounded-md border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-800">
+          ✓ 已开始发现新线索（后台运行）。结果会在下方「最近的发现任务」和「客户池」里陆续出现，无需停留等待。
+        </div>
+      )}
+
+      {/* Custom Query — 先填关键词 */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">① 自定义搜索词（可选）</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={triggerDiscovery} className="flex gap-3">
+            <input type="hidden" name="mode" value="custom" />
+            <input
+              type="text"
+              name="customQuery"
+              placeholder='e.g. "yoga leggings brand" site:instagram.com'
+              className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <Button type="submit" size="sm">用这个词搜索</Button>
+          </form>
+          <p className="text-xs text-muted-foreground mt-2">填了关键词就用关键词搜；不填则在下面选一个预设路径。</p>
+        </CardContent>
+      </Card>
+
+      {/* Discovery Presets — 选择路径 */}
+      <h2 className="text-sm font-semibold mb-2">② 或选择预设路径</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         {DISCOVERY_PRESETS.map((preset) => (
           <Card key={preset.id} className="hover:shadow-md transition-shadow">
@@ -109,25 +137,6 @@ export default async function DiscoveryPage() {
           </Card>
         ))}
       </div>
-
-      {/* Custom Query */}
-      <Card className="mb-8">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">自定义搜索词</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={triggerDiscovery} className="flex gap-3">
-            <input type="hidden" name="mode" value="custom" />
-            <input
-              type="text"
-              name="customQuery"
-              placeholder='e.g. "yoga leggings brand" site:instagram.com'
-              className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <Button type="submit" size="sm">搜索</Button>
-          </form>
-        </CardContent>
-      </Card>
 
       {/* Recent Jobs */}
       {recentJobs && recentJobs.length > 0 && (

@@ -21,6 +21,28 @@ import nodemailer from 'nodemailer'
 
 let _transporter: nodemailer.Transporter | null = null
 
+/** Per-user sending credentials (so each salesperson sends from their own mailbox). */
+export interface SenderCreds {
+  fromName?: string
+  fromEmail: string
+  appPassword: string
+  smtpHost?: string | null
+  smtpPort?: number | null
+}
+
+/** Build a one-off transporter from explicit per-user credentials. */
+function buildTransporter(c: SenderCreds): nodemailer.Transporter {
+  const port = c.smtpPort ?? 465
+  if (c.smtpHost) {
+    return nodemailer.createTransport({
+      host: c.smtpHost, port, secure: port === 465, requireTLS: port === 587,
+      auth: { user: c.fromEmail, pass: c.appPassword },
+    })
+  }
+  // No SMTP host → assume Gmail app password
+  return nodemailer.createTransport({ service: 'gmail', auth: { user: c.fromEmail, pass: c.appPassword } })
+}
+
 function getTransporter() {
   if (_transporter) return _transporter
 
@@ -59,11 +81,11 @@ export async function sendGmail(params: {
   toName?: string
   subject: string
   body: string
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+}, sender?: SenderCreds | null): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    const transporter = getTransporter()
-    const fromName  = process.env.SENDER_NAME  ?? 'Alex'
-    const fromEmail = process.env.SENDER_EMAIL ?? process.env.GMAIL_USER!
+    const transporter = sender ? buildTransporter(sender) : getTransporter()
+    const fromName  = sender?.fromName  ?? process.env.SENDER_NAME  ?? 'Alex'
+    const fromEmail = sender?.fromEmail ?? process.env.SENDER_EMAIL ?? process.env.GMAIL_USER!
 
     // CAN-SPAM / GDPR compliance: append unsubscribe footer
     const unsubEmail = fromEmail

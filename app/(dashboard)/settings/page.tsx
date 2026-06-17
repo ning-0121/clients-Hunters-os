@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { getAppConfig, SEGMENT_LABELS, SALES_FOCUS_LABELS, type DiscoverySegment, type SalesFocus } from '@/lib/config'
 import { saveAutoDiscoveryConfig, saveSalesFocus, reopenOnboarding } from '@/actions/settings'
 import { saveTeamConfig } from '@/actions/assignment'
+import { createEmployee, saveMyEmailSettings } from '@/actions/team'
+import { getBdIdentity } from '@/lib/bd/shared'
 import { OUTREACH_TONE_LABELS } from '@/lib/config'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -52,6 +54,9 @@ function StatCell({ label, value, highlight }: { label: string; value: string | 
 export default async function SettingsPage() {
   const supabase = await createServiceClient()
   const cfg = await getAppConfig()
+  const { who } = await getBdIdentity()
+  const { data: myEmail } = await supabase.from('user_email_settings')
+    .select('sender_email, from_name, smtp_host, smtp_port, active').eq('owner', who).maybeSingle()
   const ALL_SEGMENTS: DiscoverySegment[] = ['overseas', 'domestic', 'recruitment']
 
   const yesterday = new Date(Date.now() - 86_400_000).toISOString()
@@ -202,6 +207,56 @@ export default async function SettingsPage() {
             </div>
             <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存</button>
             <p className="text-[11px] text-muted-foreground">在「经理 · BD 看板」点「分派今日客户」即可按配额把<strong>有联系方式</strong>的客户派给每名销售。联系方式不全的客户不会被分派。</p>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* ── 新建员工 ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">新建员工账号</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={createEmployee} className="flex flex-wrap items-end gap-3">
+            <div><label className="text-xs text-muted-foreground block mb-1">邮箱（登录用）</label>
+              <input name="email" type="email" required placeholder="sales@example.com" className="px-3 py-1.5 border rounded-md bg-background text-sm w-56" /></div>
+            <div><label className="text-xs text-muted-foreground block mb-1">姓名</label>
+              <input name="name" placeholder="张三" className="px-3 py-1.5 border rounded-md bg-background text-sm w-32" /></div>
+            <div><label className="text-xs text-muted-foreground block mb-1">初始密码（≥8 位）</label>
+              <input name="password" type="text" required minLength={8} placeholder="临时密码，员工可改" className="px-3 py-1.5 border rounded-md bg-background text-sm w-44" /></div>
+            <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">创建并加入名册</button>
+          </form>
+          <p className="text-[11px] text-muted-foreground mt-2">创建后把邮箱+初始密码告知员工，让其登录后到本页「我的发件邮箱」绑定自己的邮箱，并尽快改密码。新员工会自动加入销售名册。</p>
+        </CardContent>
+      </Card>
+
+      {/* ── 我的发件邮箱（员工自助绑定）── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            我的发件邮箱
+            <Badge variant={myEmail?.active ? 'default' : 'secondary'} className="text-xs font-normal">
+              {myEmail?.sender_email ? (myEmail.active ? `已绑定 ${myEmail.sender_email}` : '已绑定·已停用') : '未绑定'}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground mb-3">绑定你自己的邮箱后，分给你的客户开发信将<strong>从你的邮箱发出</strong>。Gmail 请用「应用专用密码」；企业邮箱填 SMTP 主机。当前登录身份：{who}</p>
+          <form action={saveMyEmailSettings} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs text-muted-foreground block mb-1">发件邮箱</label>
+                <input name="senderEmail" type="email" defaultValue={myEmail?.sender_email ?? ''} placeholder="you@gmail.com" className="w-full px-3 py-1.5 border rounded-md bg-background text-sm" /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">发件人显示名</label>
+                <input name="fromName" defaultValue={myEmail?.from_name ?? ''} placeholder="Alex" className="w-full px-3 py-1.5 border rounded-md bg-background text-sm" /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">SMTP 主机（Gmail 留空）</label>
+                <input name="smtpHost" defaultValue={myEmail?.smtp_host ?? ''} placeholder="mail.example.com" className="w-full px-3 py-1.5 border rounded-md bg-background text-sm" /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">SMTP 端口</label>
+                <input name="smtpPort" type="number" defaultValue={myEmail?.smtp_port ?? 465} className="w-full px-3 py-1.5 border rounded-md bg-background text-sm" /></div>
+            </div>
+            <div><label className="text-xs text-muted-foreground block mb-1">应用专用密码 / SMTP 密码{myEmail?.sender_email ? '（留空表示不修改）' : ''}</label>
+              <input name="appPassword" type="password" placeholder="xxxx xxxx xxxx xxxx" className="w-full px-3 py-1.5 border rounded-md bg-background text-sm" /></div>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="active" defaultChecked={myEmail?.active ?? true} className="h-4 w-4" />启用（用此邮箱发送我的开发信）</label>
+            <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存绑定</button>
           </form>
         </CardContent>
       </Card>
