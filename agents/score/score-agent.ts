@@ -152,10 +152,11 @@ export class ScoreAgent extends BaseAgent {
       updated_at:  new Date().toISOString(),
     }).eq('id', companyId)
 
-    // Queue outreach for A/B, skip D
-    if (grade !== 'D') {
-      await this.enqueueJob('draft_outreach', { companyId }, grade === 'A' ? 2 : 3)
-    }
+    // NOTE: auto-drafting first-touch emails is intentionally disabled. Auto
+    // drafts were generic / made unverified claims and got queued before any
+    // research. Emails are now created only via the human-in-the-loop 开发信工作台
+    // (/companies/[id]/outreach), which grounds them in real factory caps +
+    // collected data and requires approval before send.
 
     await this.logAction({
       companyId, actionType: 'score_company',

@@ -118,7 +118,7 @@ export default async function ApprovalsPage() {
                       </button>
                     </form>
                     <Link href={`/approvals/${item.id}`} className="w-full sm:w-auto text-center px-5 py-3 sm:py-1.5 text-sm border rounded-md hover:bg-accent transition-colors text-muted-foreground">
-                      编辑邮件
+                      查看详情
                     </Link>
                   </div>
                 </CardContent>

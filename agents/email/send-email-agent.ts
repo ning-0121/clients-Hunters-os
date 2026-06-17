@@ -6,6 +6,7 @@ import { BaseAgent, type AgentContext, type AgentResult } from '@/agents/base-ag
 import { createServiceClient } from '@/lib/supabase/server'
 import { sendGmail, isGmailConfigured } from '@/lib/email/gmail'
 import { checkSendThrottle, recordSend } from '@/lib/email/throttle'
+import { verifyEmail } from '@/lib/email/verify'
 
 interface SendEmailInput {
   outreachLogId: string
@@ -67,6 +68,19 @@ export class SendEmailAgent extends BaseAgent {
     // Guard: no recipient = abort (don't silently log as sent)
     if (!recipientEmail) {
       return { success: false, error: `No email address found for contact on outreach log ${outreachLogId}` }
+    }
+
+    // 1b. Verify deliverability — never send to a confirmed-bad address.
+    const verify = await verifyEmail(recipientEmail)
+    if (verify.block) {
+      await supabase.from('outreach_logs').update({
+        status: 'failed',
+        personalization_data: { ...((log.personalization_data as Record<string, unknown>) ?? {}), email_verify: verify.status },
+      }).eq('id', outreachLogId)
+      if (log.contact_id) {
+        await supabase.from('contacts').update({ email_deliverable: false }).eq('id', log.contact_id)
+      }
+      return { success: false, error: `邮箱不可达（${verify.status}），已拦截未发送：${recipientEmail}` }
     }
 
     // 2. Send

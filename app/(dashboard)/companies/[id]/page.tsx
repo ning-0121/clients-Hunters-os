@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { triggerScoreCompany, triggerEnrichCompany, triggerDraftOutreach } from '@/actions/companies'
+import { triggerScoreCompany, triggerEnrichCompany } from '@/actions/companies'
 import { triggerTierCompany } from '@/actions/tiering'
 import { triggerCustomsLookup, saveCustomsNotes } from '@/actions/customs'
 import { triggerApolloLookup } from '@/actions/apollo'
@@ -208,12 +208,9 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
             </form>
           )}
           {company.status === 'scored' && !outreachLogs?.length && (
-            <form action={triggerDraftOutreach}>
-              <input type="hidden" name="companyId" value={id} />
-              <button type="submit" className="text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-                起草开发信
-              </button>
-            </form>
+            <Link href={`/companies/${id}/outreach`} className="text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+              起草开发信
+            </Link>
           )}
           <form action={triggerTierCompany}>
             <input type="hidden" name="companyId" value={id} />

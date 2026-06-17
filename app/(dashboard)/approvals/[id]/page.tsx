@@ -1,5 +1,6 @@
 import { createServiceClient as createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
+import Link from 'next/link'
 import { approveAction, rejectAction } from '@/actions/approvals'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,7 +38,8 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="p-6 max-w-3xl">
-      <div className="flex items-center gap-3 mb-6">
+      <Link href="/approvals" className="text-xs text-muted-foreground hover:underline">← 返回审批列表</Link>
+      <div className="flex items-center gap-3 mt-2 mb-6">
         <span className={`text-lg font-bold ${levelColor}`}>{approval.approval_level}</span>
         <h1 className="text-xl font-bold">{approval.title}</h1>
       </div>
@@ -48,9 +50,12 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
             <CardTitle className="text-sm text-muted-foreground">公司</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="font-medium">{String(company?.name ?? '—')}</p>
+            {company?.id ? (
+              <Link href={`/companies/${String(company.id)}`} className="font-medium text-primary hover:underline">{String(company?.name ?? '—')}</Link>
+            ) : <p className="font-medium">{String(company?.name ?? '—')}</p>}
             <p className="text-sm text-muted-foreground">评级 {String(company?.grade ?? '?')} · 分数 {String(company?.total_score ?? '?')}</p>
             <p className="text-sm text-muted-foreground">{String(company?.country ?? '—')}</p>
+            {!!company?.id && <Link href={`/companies/${String(company.id)}`} className="text-xs text-primary hover:underline">查看评分依据 →</Link>}
           </CardContent>
         </Card>
         <Card>
