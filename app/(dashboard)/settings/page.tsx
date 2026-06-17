@@ -1,8 +1,8 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { getAppConfig, SEGMENT_LABELS, type DiscoverySegment } from '@/lib/config'
-import { saveAutoDiscoveryConfig } from '@/actions/settings'
+import { getAppConfig, SEGMENT_LABELS, SALES_FOCUS_LABELS, type DiscoverySegment, type SalesFocus } from '@/lib/config'
+import { saveAutoDiscoveryConfig, saveSalesFocus } from '@/actions/settings'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -127,6 +127,32 @@ export default async function SettingsPage() {
         <h1 className="text-2xl font-bold">设置</h1>
         <p className="text-sm text-muted-foreground mt-1">系统状态与配置</p>
       </div>
+
+      {/* ── 主推方向（决定报告/开发信方向）── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            主推方向
+            <Badge variant="default" className="text-xs font-normal">{SALES_FOCUS_LABELS[cfg.salesFocus]}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={saveSalesFocus} className="space-y-3">
+            <p className="text-xs text-muted-foreground">决定所有报告与开发信的方向。选「只卖运动服」后，系统不会再向任何客户（含国内外贸公司）推销软件。</p>
+            <div className="space-y-1.5">
+              {(['activewear', 'activewear_first', 'software'] as SalesFocus[]).map((f) => (
+                <label key={f} className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="salesFocus" value={f} defaultChecked={cfg.salesFocus === f} className="h-4 w-4" />
+                  {SALES_FOCUS_LABELS[f]}
+                </label>
+              ))}
+            </div>
+            <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+              保存
+            </button>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* ── Auto-discovery (每日自动获客) ── */}
       <Card>

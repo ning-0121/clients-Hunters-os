@@ -9,9 +9,13 @@ CREATE TABLE IF NOT EXISTS app_config (
   auto_discovery_enabled  BOOLEAN DEFAULT false,
   daily_quota             INT DEFAULT 20,
   segments                JSONB DEFAULT '["overseas","domestic","recruitment"]'::jsonb,
+  sales_focus             TEXT DEFAULT 'activewear',  -- activewear | activewear_first | software
   updated_at              TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT app_config_singleton CHECK (id = 'singleton')
 );
+
+-- For tables created before sales_focus existed:
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS sales_focus TEXT DEFAULT 'activewear';
 
 INSERT INTO app_config (id) VALUES ('singleton') ON CONFLICT (id) DO NOTHING;
 

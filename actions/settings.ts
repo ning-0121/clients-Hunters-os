@@ -23,3 +23,20 @@ export async function saveAutoDiscoveryConfig(formData: FormData): Promise<void>
   }
   revalidatePath('/settings')
 }
+
+/** Save the primary sales focus (activewear / activewear_first / software). */
+export async function saveSalesFocus(formData: FormData): Promise<void> {
+  const raw = String(formData.get('salesFocus') ?? 'activewear')
+  const salesFocus = (raw === 'activewear' || raw === 'activewear_first' || raw === 'software') ? raw : 'activewear'
+  try {
+    const sb = await createServiceClient()
+    await sb.from('app_config').upsert({
+      id: 'singleton',
+      sales_focus: salesFocus,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+  } catch (err) {
+    console.error('[saveSalesFocus]', err)
+  }
+  revalidatePath('/settings')
+}

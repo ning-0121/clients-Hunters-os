@@ -18,6 +18,7 @@ import { reportDepthForTier, type CustomerTier, type ReportDepth } from '@/lib/t
 import { recommendFactoryForCompany } from '@/lib/factory/recommend'
 import { FACTORY_DECISION_LABELS } from '@/lib/factory/matcher'
 import { parseJsonWithRepair } from '@/lib/llm/json'
+import { getAppConfig, salesFocusDirective } from '@/lib/config'
 
 const COMPLIANCE_KEYWORDS = [
   'bsci', 'wrap', 'smeta', 'sedex', 'oeko-tex', 'oeko tex', 'grs', 'iso 9001',
@@ -52,11 +53,13 @@ CRITICAL ANTI-HALLUCINATION RULES:
 Write for SALESPEOPLE: concrete, actionable, apparel-specific. Return ONLY valid JSON matching the
 requested shape. No markdown, no commentary.`
 
-const DOMESTIC_REPORT_SYSTEM_PROMPT = `你是 QIMO / Jojofashion 的国内市场分析师。
-我们既是服装 OEM/ODM 工厂，也销售外贸客户开发软件（ARAOS / 订单节拍器 Order Metronome / Trade OS）。
-为国内外贸/贸易公司撰写客户情报报告，目标是判断如何发展：订单合作、软件销售、或渠道合作。
+function domesticReportSystemPrompt(directive: string): string {
+  return `你是 QIMO / Jojofashion 的国内市场分析师。母公司 Qimo Clothing 是中国运动服 OEM/ODM 工厂。
+${directive}
+为国内外贸/贸易公司撰写客户情报报告，判断如何发展（订单合作 / 渠道合作 等）。
 务实、面向一线销售。不要编造事实，未知信息写 null 或"待核实"。
 只返回合法 JSON，不要 markdown。字符串值内部不要出现真实换行，所有换行必须转义为 \\n。`
+}
 
 const JSON_REPAIR_PROMPT = `You are a JSON repair tool. The user message contains a JSON document that fails to parse.
 Return ONLY the corrected, strictly-valid JSON — no markdown, no explanation, no code fences.
@@ -244,9 +247,12 @@ export class CustomerReportAgent extends BaseAgent {
     const supabase = await createServiceClient()
     const main = company.website ? await scrapeWebsite(company.website as string).catch(() => null) : null
 
+    const cfg = await getAppConfig()
+    const focusDirective = salesFocusDirective(cfg.salesFocus)
+
     let raw: string
     try {
-      raw = await this.callLLM(DOMESTIC_REPORT_SYSTEM_PROMPT, this.buildDomesticPrompt(company, main?.bodyText ?? ''), {
+      raw = await this.callLLM(domesticReportSystemPrompt(focusDirective), this.buildDomesticPrompt(company, main?.bodyText ?? '', focusDirective), {
         maxTokens: 6000, temperature: 0.4,
       })
     } catch (err) {
@@ -308,8 +314,9 @@ export class CustomerReportAgent extends BaseAgent {
     return { success: true, data: { reportId: inserted?.id, version: nextVersion, kind: 'domestic' } }
   }
 
-  private buildDomesticPrompt(company: Record<string, unknown>, bodyText: string): string {
+  private buildDomesticPrompt(company: Record<string, unknown>, bodyText: string, directive = ''): string {
     return `为这家国内外贸/贸易公司生成《客户情报报告》（中文）。
+${directive ? `\n【主推方向（务必遵守）】${directive}\n若主推方向不含软件，则"软件系统需求可能性"评分填 0、"software_demo_invitation" 写"本轮不推软件"，"推荐合作模式"只在订单合作/渠道合作中选。\n` : ''}
 
 === 已知结构化数据（视为已确认）===
 公司名称：${company.name}
