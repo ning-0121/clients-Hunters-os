@@ -58,18 +58,18 @@ const mobileNav = [
 ]
 
 const navLinkCls =
-  'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-[--sidebar-foreground]/80 hover:text-white hover:bg-[--sidebar-accent] transition-colors'
+  'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/80 hover:text-white hover:bg-sidebar-accent transition-colors'
 
-const sectionCls = 'text-[11px] font-medium text-[--sidebar-foreground]/45 uppercase tracking-wider'
+const sectionCls = 'text-[11px] font-medium text-sidebar-foreground/45 uppercase tracking-wider'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar — hidden on mobile */}
-      <aside className="hidden md:flex w-56 flex-col shrink-0 bg-[--sidebar] text-[--sidebar-foreground] border-r border-[--sidebar-border]">
-        <div className="px-4 py-5 border-b border-[--sidebar-border]">
+      <aside className="hidden md:flex w-56 flex-col shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+        <div className="px-4 py-5 border-b border-sidebar-border">
           <h1 className="text-lg font-bold tracking-tight text-white">ARAOS</h1>
-          <p className="text-xs text-[--sidebar-foreground]/60 mt-0.5">QIMO 客户开发系统</p>
+          <p className="text-xs text-sidebar-foreground/60 mt-0.5">QIMO 客户开发系统</p>
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
           <div className="pb-1 px-3">
@@ -100,8 +100,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           ))}
         </nav>
-        <div className="px-4 py-3 border-t border-[--sidebar-border]">
-          <p className="text-xs text-[--sidebar-foreground]/50">QIMO · 运动服 OEM/ODM</p>
+        <div className="px-4 py-3 border-t border-sidebar-border">
+          <p className="text-xs text-sidebar-foreground/50">QIMO · 运动服 OEM/ODM</p>
         </div>
       </aside>
 
