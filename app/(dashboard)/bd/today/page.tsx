@@ -33,6 +33,7 @@ export default async function BdTodayPage() {
     { data: urgentTasks },
     { data: pendingApprovals },
     { data: recos },
+    { data: newLeads },
     { data: replies },
     { data: followups },
     { count: assignedCount },
@@ -50,6 +51,9 @@ export default async function BdTodayPage() {
     sb.from('companies').select('id, name, description, country, region, city, website, instagram_handle, tiktok_handle, linkedin_url, data_flag, customer_tier, target_customer_segment, recommended_development_strategy, compliance_level, compliance_blockers, recommended_factory_type, next_action, product_match, assigned_to, status')
       .eq('assigned_to', who).in('customer_tier', ['A', 'B', 'C']).neq('status', 'closed_lost').neq('status', 'closed_won')
       .order('customer_tier', { ascending: true }).order('total_score', { ascending: false }).limit(30),
+    sb.from('companies').select('id, name, country, region, customer_tier, status, target_customer_segment, created_at')
+      .gte('created_at', dayStartIso).neq('status', 'closed_lost')
+      .order('created_at', { ascending: false }).limit(30),
     sb.from('reply_events').select('id, company_id, from_email, reply_subject, reply_body, reply_intent, reply_sentiment, received_at, companies(name)')
       .order('received_at', { ascending: false }).limit(12),
     sb.from('followup_runs').select('id, company_id, step, status, scheduled_for, companies(name, customer_tier)')
@@ -146,6 +150,30 @@ export default async function BdTodayPage() {
             <Card><CardContent className="py-6 text-sm text-muted-foreground text-center">今天没有紧急任务 🎉 看看下方推荐客户。</CardContent></Card>
           )}
         </div>
+      </section>
+
+      {/* 今日新增线索 */}
+      <section>
+        <h2 className="text-sm font-semibold mb-2">今日新增线索（{newLeads?.length ?? 0}）<span className="text-xs font-normal text-muted-foreground">· 今天发现、待完善的新客户</span></h2>
+        {newLeads?.length ? (
+          <div className="rounded-md border divide-y">
+            {newLeads.map((c) => (
+              <div key={c.id} className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/30">
+                <Link href={`/companies/${c.id}`} className="font-medium hover:underline flex-1 truncate">{decodeHtml(c.name)}</Link>
+                <span className="text-xs text-muted-foreground">{c.country ?? c.region ?? ''}</span>
+                {c.customer_tier
+                  ? <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${TIER_STYLES[c.customer_tier]}`}>{c.customer_tier}</span>
+                  : <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">待分级</span>}
+                {c.target_customer_segment && <Badge variant="outline" className="text-[10px]">{SEGMENT_LABELS[c.target_customer_segment] ?? c.target_customer_segment}</Badge>}
+                <Link href={`/companies/${c.id}`} className="text-xs px-2 py-1 border rounded-md">完善</Link>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Card><CardContent className="py-4 text-sm text-muted-foreground text-center">
+            今天还没有新增线索。<Link href="/leads/discovery" className="text-primary hover:underline">运行 Discovery 发现新客户 →</Link>
+          </CardContent></Card>
+        )}
       </section>
 
       {/* 今日推荐客户 */}

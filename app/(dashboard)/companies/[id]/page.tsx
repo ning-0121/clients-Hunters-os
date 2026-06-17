@@ -9,6 +9,7 @@ import { triggerCustomsLookup, saveCustomsNotes } from '@/actions/customs'
 import { triggerApolloLookup } from '@/actions/apollo'
 import { verifyContactEmails } from '@/actions/email'
 import { flagCompanyData, clearCompanyFlag } from '@/actions/data-quality'
+import { triggerDomesticContactLookup } from '@/actions/domestic-contacts'
 import { generateReport, createTaskFromReport } from '@/actions/reports'
 import { createSample } from '@/actions/samples'
 import { createOrder, confirmOrder } from '@/actions/orders'
@@ -641,6 +642,10 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                   <input type="hidden" name="companyId" value={id} />
                   <button type="submit" className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent">验证邮箱</button>
                 </form>
+                <form action={triggerDomesticContactLookup}>
+                  <input type="hidden" name="companyId" value={id} />
+                  <button type="submit" className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent">查国内联系方式</button>
+                </form>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -680,8 +685,22 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                   )}
                 </div>
               )) : (
-                <p className="text-xs text-muted-foreground">暂无联系人。点击「富集信息」自动查找。</p>
+                <p className="text-xs text-muted-foreground">暂无联系人。点击「富集信息」或「查国内联系方式」自动查找。</p>
               )}
+              {(() => {
+                const dc = (company.source_raw as Record<string, unknown> | null)?.domestic_contacts as
+                  { phones?: string[]; emails?: string[]; wechats?: string[]; sources?: string[] } | undefined
+                if (!dc || (!dc.phones?.length && !dc.emails?.length && !dc.wechats?.length)) return null
+                return (
+                  <div className="border-t pt-2 mt-1 text-[11px] space-y-1">
+                    <p className="text-muted-foreground font-medium">网络检索到的联系方式：</p>
+                    {dc.phones?.length ? <div>☎ {dc.phones.join('、')}</div> : null}
+                    {dc.emails?.length ? <div>✉ {dc.emails.join('、')}</div> : null}
+                    {dc.wechats?.length ? <div>💬 微信：{dc.wechats.join('、')}</div> : null}
+                    <p className="text-muted-foreground/70">⚠ 网络公开信息，请人工核实后再使用</p>
+                  </div>
+                )
+              })()}
             </CardContent>
           </Card>
 
@@ -754,14 +773,24 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           {(() => {
             const customs = (company.source_raw as Record<string, unknown> | null)?.customs as
               { importyetiUrl?: string | null; searchUrl?: string; snippets?: string[]; supplierHints?: string[]; checkedAt?: string } | undefined
-            const searchUrl = customs?.searchUrl
-              ?? `https://www.importyeti.com/search?q=${encodeURIComponent(decodeHtml(company.name))}`
+            const nm = decodeHtml(company.name)
+            const isDomestic = company.country === 'China' || company.country === '中国'
+              || (typeof company.target_customer_segment === 'string' && company.target_customer_segment.startsWith('domestic'))
+              || !!company.domestic_company_type
+            // Google links ALWAYS open (ImportYeti itself is Cloudflare-gated → often "打不开").
+            const googleCustoms = isDomestic
+              ? `https://www.google.com/search?q=${encodeURIComponent(`"${nm}" 进出口 OR 海关 OR 客户 OR 供应商`)}`
+              : `https://www.google.com/search?q=${encodeURIComponent(`site:importyeti.com ${nm}`)}`
+            const importyetiSearch = `https://www.importyeti.com/search?q=${encodeURIComponent(nm)}`
             return (
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">海关数据 (ImportYeti)</CardTitle>
+                  <CardTitle className="text-sm">{isDomestic ? '供应链 / 进出口线索' : '海关数据 (ImportYeti)'}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-xs">
+                  {isDomestic && (
+                    <p className="text-[11px] text-amber-700">该客户为国内公司，ImportYeti 是美国进口数据、通常查不到。下方用 Google 搜进出口/供应链线索更有效。</p>
+                  )}
                   <div className="flex gap-1.5 flex-wrap">
                     <form action={triggerCustomsLookup}>
                       <input type="hidden" name="companyId" value={id} />
@@ -769,8 +798,12 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                         {customs ? '重新查询' : '查海关数据'}
                       </button>
                     </form>
-                    <a href={customs?.importyetiUrl ?? searchUrl} target="_blank" rel="noopener noreferrer"
-                      className="text-xs px-2.5 py-1 border rounded-md hover:bg-accent">在 ImportYeti 打开 ↗</a>
+                    <a href={googleCustoms} target="_blank" rel="noopener noreferrer"
+                      className="text-xs px-2.5 py-1 border rounded-md hover:bg-accent">Google 搜进出口 ↗</a>
+                    {!isDomestic && (
+                      <a href={customs?.importyetiUrl ?? importyetiSearch} target="_blank" rel="noopener noreferrer"
+                        className="text-xs px-2.5 py-1 border rounded-md hover:bg-accent">ImportYeti ↗</a>
+                    )}
                   </div>
                   {company.current_supplier_hints && company.current_supplier_hints.length > 0 && (
                     <div>

@@ -79,7 +79,9 @@ function clamp10(n: number): number {
  * sales team can act on it today.
  */
 export interface ContactReadiness {
-  /** A decision-level contact with a verified/deliverable email OR a phone. */
+  /** A key contact with a VERIFIED/deliverable EMAIL (A-tier requirement). */
+  hasVerifiedEmail: boolean
+  /** A key contact reachable any way (verified email OR phone). */
   hasVerifiedKeyContact: boolean
   /** Any contact at all (named person or email). */
   hasAnyContact: boolean
@@ -87,11 +89,11 @@ export interface ContactReadiness {
 
 /** Why the contact gate moved the tier (for UI + self-correction prompts). */
 export function contactGateNote(naturalTier: CustomerTier, c: ContactReadiness): string | null {
-  if (naturalTier === 'A' && !c.hasVerifiedKeyContact) {
-    return '⚠ 匹配度达 A，但缺少「已验证的关键人联系方式」，暂列 B —— 补齐关键人已验证邮箱/电话后自动升 A。'
+  if (naturalTier === 'A' && !c.hasVerifiedEmail) {
+    return '⚠ 匹配度达 A，但缺少「已验证的关键人邮箱」，暂列 B —— 补齐并验证关键人邮箱后自动升 A（仅有电话不够）。'
   }
   if ((naturalTier === 'A' || naturalTier === 'B') && !c.hasAnyContact) {
-    return '⚠ 暂无任何联系人/联系方式 —— 请先富集或用 Apollo 查决策人，再验证邮箱。'
+    return '⚠ 暂无任何联系人/联系方式 —— 请先富集或用 Apollo / 查国内联系方式，再验证邮箱。'
   }
   return null
 }
@@ -116,12 +118,12 @@ function classifyTierBase(d: TierDimensions): CustomerTier {
   // Unacceptable risk that scale/strategy can't justify.
   if (risk >= 9 && strategic < 7) return 'D'
 
-  // ── A: large strategic account ───────────────────────────────────────────
-  // A requires a real product match (we must be able to make what they buy) AND
-  // strategic scale. Match degree comes first per the BD standard.
-  if (product >= 6 && strategic >= 7 && scale >= 7) return 'A'
+  // ── A: large strategic account (strict) ──────────────────────────────────
+  // A requires a strong product match AND high strategic value AND large scale.
+  // Match degree comes first per the BD standard.
+  if (product >= 6 && strategic >= 7 && scale >= 8) return 'A'
   // Very large brand behind a strict compliance wall = strategic by definition.
-  if (product >= 5 && scale >= 8 && highCompliance) return 'A'
+  if (product >= 5 && scale >= 9 && highCompliance) return 'A'
 
   // ── B: best short-term target ────────────────────────────────────────────
   // Winnable now: real order potential, decent match, not a micro-buyer.
@@ -143,7 +145,7 @@ function classifyTierBase(d: TierDimensions): CustomerTier {
 export function classifyTier(d: TierDimensions, contact?: ContactReadiness): CustomerTier {
   const base = classifyTierBase(d)
   if (!contact) return base
-  if (base === 'A' && !contact.hasVerifiedKeyContact) return 'B'
+  if (base === 'A' && !contact.hasVerifiedEmail) return 'B'  // A requires a verified email
   return base
 }
 

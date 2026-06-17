@@ -120,6 +120,7 @@ export class TieringAgent extends BaseAgent {
     // Contact readiness — A requires a verified way to reach a key person.
     const contactList = contacts ?? []
     const readiness: ContactReadiness = {
+      hasVerifiedEmail: contactList.some((c) => c.email_verified === true || c.email_deliverable === true),
       hasVerifiedKeyContact: contactList.some((c) =>
         c.email_verified === true || c.email_deliverable === true || (typeof c.phone === 'string' && c.phone.trim().length > 0)),
       hasAnyContact: contactList.some((c) => (c.full_name && String(c.full_name).trim()) || (c.email && String(c.email).trim())),

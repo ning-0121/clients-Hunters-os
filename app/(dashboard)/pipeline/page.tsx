@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import Link from 'next/link'
 import { bulkQueueAction } from '@/actions/bulk'
+import { decodeHtml } from '@/lib/bd/shared'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -154,7 +155,7 @@ export default async function PipelinePage() {
           return (
             <div
               key={col.key}
-              className={`flex flex-col shrink-0 w-[200px] rounded-lg border bg-muted/30 border-t-2 ${col.headerClass}`}
+              className={`flex flex-col shrink-0 w-[240px] rounded-lg border bg-muted/30 border-t-2 ${col.headerClass}`}
             >
               {/* Column header */}
               <div className="px-3 py-2.5 border-b bg-card rounded-t-lg">
@@ -178,59 +179,42 @@ export default async function PipelinePage() {
                   const isScored = ['scored', 'outreach', 'engaged', 'qualified'].includes(c.status)
 
                   return (
-                    <Card
+                    <Link
                       key={c.id}
-                      className="shadow-none hover:shadow-sm transition-shadow cursor-pointer"
+                      href={`/companies/${c.id}`}
+                      className="block rounded-md border bg-card p-2.5 hover:border-foreground hover:shadow-sm transition-all"
                     >
-                      <CardContent className="p-2.5 space-y-1.5">
-                        {/* Name */}
-                        <Link
-                          href={`/companies/${c.id}`}
-                          className="text-xs font-semibold leading-snug hover:underline line-clamp-2 block"
-                        >
-                          {c.name}
-                        </Link>
+                      {/* Name */}
+                      <p className="text-xs font-semibold leading-snug text-foreground line-clamp-2">
+                        {decodeHtml(c.name)}
+                      </p>
 
-                        {/* Grade + Score row */}
-                        {isScored && c.grade && (
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
-                                GRADE_CLASSES[c.grade] ?? GRADE_CLASSES['D']
-                              }`}
-                            >
-                              {c.grade}
+                      {/* Grade + Score row */}
+                      {isScored && c.grade && (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
+                              GRADE_CLASSES[c.grade] ?? GRADE_CLASSES['D']
+                            }`}
+                          >
+                            {c.grade}
+                          </span>
+                          {c.total_score != null && (
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              {Math.round(c.total_score)}
                             </span>
-                            {c.total_score != null && (
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                {Math.round(c.total_score)}
-                              </span>
-                            )}
-                          </div>
-                        )}
+                          )}
+                        </div>
+                      )}
 
-                        {/* Country */}
-                        {c.country && (
-                          <p className="text-[10px] text-muted-foreground leading-none">
-                            {c.country}
-                          </p>
-                        )}
-
-                        {/* Email count */}
-                        {emailCount > 0 && (
-                          <p className="text-[10px] text-muted-foreground">
-                            已发送 {emailCount} 封邮件
-                          </p>
-                        )}
-
-                        {/* IG followers */}
+                      <div className="flex items-center gap-2 flex-wrap mt-1 text-[10px] text-muted-foreground">
+                        {c.country && <span>{c.country}</span>}
+                        {emailCount > 0 && <span>· 已发 {emailCount} 封</span>}
                         {c.instagram_followers != null && c.instagram_followers >= 10000 && (
-                          <p className="text-[10px] text-muted-foreground">
-                            {(c.instagram_followers / 1000).toFixed(0)}k IG
-                          </p>
+                          <span>· {(c.instagram_followers / 1000).toFixed(0)}k IG</span>
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </Link>
                   )
                 })}
               </div>

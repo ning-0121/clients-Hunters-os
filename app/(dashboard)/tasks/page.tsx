@@ -87,7 +87,9 @@ function TaskRow({ task }: { task: Record<string, any> }) {
           <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-gray-300'}`} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium text-sm">{task.title}</span>
+              {task.company_id
+                ? <Link href={`/companies/${task.company_id}`} className="font-medium text-sm hover:underline">{task.title}</Link>
+                : <span className="font-medium text-sm">{task.title}</span>}
               <Badge variant="outline" className="text-[10px]">{TYPE_LABEL[task.task_type] ?? task.task_type}</Badge>
               {company?.grade && (
                 <span className="text-[10px] font-bold text-muted-foreground">评级 {company.grade}</span>
@@ -113,6 +115,11 @@ function TaskRow({ task }: { task: Record<string, any> }) {
 
           {/* Actions */}
           <div className="flex flex-col gap-1.5 shrink-0">
+            {task.company_id && (
+              <Link href={`/companies/${task.company_id}`} className="text-xs px-3 py-1 border rounded-md hover:bg-accent transition-colors w-full text-center whitespace-nowrap">
+                查看客户
+              </Link>
+            )}
             {task.reply_event_id && (
               <form action={draftReply}>
                 <input type="hidden" name="replyEventId" value={task.reply_event_id} />
