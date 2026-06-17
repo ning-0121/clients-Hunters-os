@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { getAppConfig } from '@/lib/config'
+import { OnboardingGate } from './onboarding-gate'
 import {
   LayoutDashboard,
   Search,
@@ -62,7 +64,8 @@ const navLinkCls =
 
 const sectionCls = 'text-[11px] font-medium text-sidebar-foreground/45 uppercase tracking-wider'
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const cfg = await getAppConfig()
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar — hidden on mobile */}
@@ -107,7 +110,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main */}
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-        {children}
+        {cfg.onboardingCompleted ? children : <OnboardingGate />}
       </main>
 
       {/* Mobile bottom nav */}

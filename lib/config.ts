@@ -13,6 +13,37 @@ export type SalesFocus = 'activewear' | 'activewear_first' | 'software'
 /** Per-salesperson assignment quota by tier. */
 export interface AssignQuota { A: number; B: number; C: number }
 
+/** Seller/company profile captured at onboarding — shapes every outreach email. */
+export interface SellerProfile {
+  companyIntro: string        // one-line who-we-are
+  sellingPoints: string[]     // core differentiators we may cite
+  targetPreferences: string   // free text: regions / categories / customer types to focus
+  outreachTone: 'professional' | 'warm' | 'concise'
+  defaultLang: 'auto' | 'en' | 'es' | 'pt' | 'zh'
+  mentionMoq: boolean
+  mentionPrice: boolean
+  signature: string
+  ctaPreference: string       // preferred call-to-action
+}
+
+export const DEFAULT_SELLER_PROFILE: SellerProfile = {
+  companyIntro: '我们是 QIMO / Jojofashion，中国运动服 OEM/ODM 工厂（瑜伽服、无缝、leggings、运动内衣、卫衣套装）。',
+  sellingPoints: ['低起订量（50件/款起）', '自有设计打版', '30-45 天返单'],
+  targetPreferences: '',
+  outreachTone: 'professional',
+  defaultLang: 'auto',
+  mentionMoq: true,
+  mentionPrice: false,
+  signature: 'Alex / Jojofashion / jojofashion.us',
+  ctaPreference: '约 15 分钟电话，或先发一份产品目录',
+}
+
+export const OUTREACH_TONE_LABELS: Record<SellerProfile['outreachTone'], string> = {
+  professional: '专业稳重',
+  warm: '热情口语',
+  concise: '简洁直接',
+}
+
 export interface AppConfig {
   autoDiscoveryEnabled: boolean
   dailyQuota: number
@@ -22,6 +53,10 @@ export interface AppConfig {
   salespeople: string[]
   /** How many of each tier each salesperson should hold. */
   assignQuota: AssignQuota
+  /** Whether first-login onboarding has been completed. */
+  onboardingCompleted: boolean
+  /** Seller/company profile that shapes outreach. */
+  sellerProfile: SellerProfile
 }
 
 export const DEFAULT_ASSIGN_QUOTA: AssignQuota = { A: 5, B: 10, C: 15 }
@@ -33,6 +68,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   salesFocus: 'activewear',   // QIMO default: sell activewear, do NOT pitch software
   salespeople: [],
   assignQuota: DEFAULT_ASSIGN_QUOTA,
+  onboardingCompleted: false,
+  sellerProfile: DEFAULT_SELLER_PROFILE,
 }
 
 export const SALES_FOCUS_LABELS: Record<SalesFocus, string> = {
@@ -83,6 +120,8 @@ export async function getAppConfig(): Promise<AppConfig> {
         B: typeof q.B === 'number' ? q.B : DEFAULT_ASSIGN_QUOTA.B,
         C: typeof q.C === 'number' ? q.C : DEFAULT_ASSIGN_QUOTA.C,
       },
+      onboardingCompleted: !!data.onboarding_completed,
+      sellerProfile: { ...DEFAULT_SELLER_PROFILE, ...((data.seller_profile as Partial<SellerProfile> | null) ?? {}) },
     }
   } catch {
     return DEFAULT_CONFIG

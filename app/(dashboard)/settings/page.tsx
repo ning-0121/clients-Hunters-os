@@ -2,8 +2,9 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { getAppConfig, SEGMENT_LABELS, SALES_FOCUS_LABELS, type DiscoverySegment, type SalesFocus } from '@/lib/config'
-import { saveAutoDiscoveryConfig, saveSalesFocus } from '@/actions/settings'
+import { saveAutoDiscoveryConfig, saveSalesFocus, reopenOnboarding } from '@/actions/settings'
 import { saveTeamConfig } from '@/actions/assignment'
+import { OUTREACH_TONE_LABELS } from '@/lib/config'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,26 @@ export default async function SettingsPage() {
             <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
               保存
             </button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* ── 公司资料 / 开发信偏好 ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">公司资料 / 开发信偏好</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div><span className="text-muted-foreground">公司简介：</span>{cfg.sellerProfile.companyIntro || '未填写'}</div>
+          <div><span className="text-muted-foreground">核心卖点：</span>{cfg.sellerProfile.sellingPoints.join('、') || '未填写'}</div>
+          <div><span className="text-muted-foreground">目标客户偏好：</span>{cfg.sellerProfile.targetPreferences || '无'}</div>
+          <div className="text-muted-foreground text-xs">
+            语气 {OUTREACH_TONE_LABELS[cfg.sellerProfile.outreachTone]} · 语言 {cfg.sellerProfile.defaultLang} ·
+            {cfg.sellerProfile.mentionMoq ? ' 提MOQ' : ' 不提MOQ'} ·{cfg.sellerProfile.mentionPrice ? ' 提价格' : ' 不提价格'} ·
+            署名 {cfg.sellerProfile.signature}
+          </div>
+          <form action={reopenOnboarding}>
+            <button type="submit" className="mt-1 text-sm px-4 py-2 border rounded-md hover:bg-accent">重新设置（公司资料/开发信偏好）</button>
           </form>
         </CardContent>
       </Card>

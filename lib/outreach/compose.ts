@@ -47,6 +47,18 @@ export interface ComposeContext {
   contactTitle?: string | null
   ourCapabilities?: string  // summary of QIMO factory strong categories + cert status
   lang?: string
+  /** From onboarding — shapes WHAT we pitch and HOW the email reads. */
+  seller?: {
+    salesFocusDirective?: string
+    companyIntro?: string
+    sellingPoints?: string[]
+    targetPreferences?: string
+    toneLabel?: string
+    mentionMoq?: boolean
+    mentionPrice?: boolean
+    signature?: string
+    ctaPreference?: string
+  }
 }
 
 export async function composeOutreach(ctx: ComposeContext, feedback?: string): Promise<ComposedOutreach | null> {
@@ -63,6 +75,17 @@ export async function composeOutreach(ctx: ComposeContext, feedback?: string): P
 
 我方（QIMO）真实产能/认证：
 ${ctx.ourCapabilities ?? '运动服/瑜伽服/无缝/leggings 强项；BSCI/WRAP 续证中、OEKO 有效'}
+${ctx.seller ? `
+=== 我方设定（务必遵守）===
+${ctx.seller.salesFocusDirective ? `主推方向：${ctx.seller.salesFocusDirective}` : ''}
+公司简介（自我介绍用）：${ctx.seller.companyIntro ?? ''}
+可引用的卖点（只能用这些，别编）：${ctx.seller.sellingPoints?.length ? ctx.seller.sellingPoints.join('；') : '低起订量、自有设计打版、快返单'}
+目标客户偏好：${ctx.seller.targetPreferences || '无特别偏好'}
+语气：${ctx.seller.toneLabel ?? '专业稳重'}
+是否提起订量(MOQ)：${ctx.seller.mentionMoq ? '可以提（50件/款起）' : '不要提'}
+是否提价格：${ctx.seller.mentionPrice ? '可以给个区间' : '不要提具体价格'}
+行动邀约(CTA)偏好：${ctx.seller.ctaPreference ?? '约15分钟电话'}
+署名：${ctx.seller.signature ?? 'Alex / Jojofashion / jojofashion.us'}` : ''}
 
 开发信语言(language)：${ctx.lang ?? 'en'}
 ${feedback ? `\n【调整要求】销售对上一版不满意，请按此重写：${feedback}` : ''}

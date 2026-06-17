@@ -2,6 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { composeOutreach, type ComposeContext } from '@/lib/outreach/compose'
+import { getAppConfig, salesFocusDirective, OUTREACH_TONE_LABELS } from '@/lib/config'
 import { revalidatePath } from 'next/cache'
 
 const LATAM = ['Mexico', 'Colombia', 'Brazil', 'Argentina', 'Peru', 'Chile', 'Venezuela']
@@ -29,8 +30,11 @@ export async function composeOutreachDraft(formData: FormData): Promise<void> {
   const { data: contact } = await sb.from('contacts').select('full_name, title')
     .eq('company_id', companyId).order('contact_priority', { ascending: false }).limit(1).maybeSingle()
 
+  const cfg = await getAppConfig()
+  const sp = cfg.sellerProfile
   const country = company.country as string | null
-  const lang = country === 'Brazil' ? 'pt' : (country && LATAM.includes(country)) ? 'es' : 'en'
+  const autoLang = country === 'Brazil' ? 'pt' : (country && LATAM.includes(country)) ? 'es' : 'en'
+  const lang = sp.defaultLang === 'auto' ? autoLang : sp.defaultLang
   const customs = (company.source_raw as Record<string, unknown> | null)?.customs as { snippets?: string[] } | undefined
 
   const ctx: ComposeContext = {
@@ -43,6 +47,17 @@ export async function composeOutreachDraft(formData: FormData): Promise<void> {
     contactName: contact?.full_name, contactTitle: contact?.title,
     ourCapabilities: await ourCapabilitiesSummary(sb),
     lang,
+    seller: {
+      salesFocusDirective: salesFocusDirective(cfg.salesFocus),
+      companyIntro: sp.companyIntro,
+      sellingPoints: sp.sellingPoints,
+      targetPreferences: sp.targetPreferences,
+      toneLabel: OUTREACH_TONE_LABELS[sp.outreachTone],
+      mentionMoq: sp.mentionMoq,
+      mentionPrice: sp.mentionPrice,
+      signature: sp.signature,
+      ctaPreference: sp.ctaPreference,
+    },
   }
 
   const composed = await composeOutreach(ctx, feedback)

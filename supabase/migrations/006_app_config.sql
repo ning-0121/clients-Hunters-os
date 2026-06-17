@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS app_config (
   salespeople             JSONB DEFAULT '[]'::jsonb,
   assign_quota            JSONB DEFAULT '{"A":5,"B":10,"C":15}'::jsonb,
   last_assignment         JSONB,
+  onboarding_completed    BOOLEAN DEFAULT false,
+  seller_profile          JSONB,
   updated_at              TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT app_config_singleton CHECK (id = 'singleton')
 );
@@ -23,6 +25,9 @@ ALTER TABLE app_config ADD COLUMN IF NOT EXISTS sales_focus TEXT DEFAULT 'active
 ALTER TABLE app_config ADD COLUMN IF NOT EXISTS salespeople JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE app_config ADD COLUMN IF NOT EXISTS assign_quota JSONB DEFAULT '{"A":5,"B":10,"C":15}'::jsonb;
 ALTER TABLE app_config ADD COLUMN IF NOT EXISTS last_assignment JSONB;
+-- First-login onboarding: seller/company profile that shapes outreach.
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false;
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS seller_profile JSONB;
 
 INSERT INTO app_config (id) VALUES ('singleton') ON CONFLICT (id) DO NOTHING;
 
