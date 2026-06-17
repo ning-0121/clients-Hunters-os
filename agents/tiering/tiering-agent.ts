@@ -10,8 +10,8 @@
 import { BaseAgent, type AgentContext, type AgentResult } from '@/agents/base-agent'
 import { createServiceClient } from '@/lib/supabase/server'
 import {
-  classifyTier, deriveFactoryType, reportDepthForTier,
-  isComplianceLevel, type ComplianceLevel, type TierDimensions,
+  classifyTier, naturalTier, contactGateNote, deriveFactoryType, reportDepthForTier,
+  isComplianceLevel, type ComplianceLevel, type TierDimensions, type ContactReadiness,
 } from '@/lib/tiering/tiering'
 import { matchFactory } from '@/lib/factory/matcher'
 import { loadFactoryPool } from '@/lib/factory/recommend'
@@ -77,8 +77,8 @@ export class TieringAgent extends BaseAgent {
     const { data: score } = await supabase
       .from('customer_scores').select('*').eq('company_id', companyId).single()
     const { data: contacts } = await supabase
-      .from('contacts').select('full_name, title, email')
-      .eq('company_id', companyId).order('contact_priority', { ascending: false }).limit(3)
+      .from('contacts').select('full_name, title, email, email_verified, email_deliverable, phone, decision_level')
+      .eq('company_id', companyId).order('contact_priority', { ascending: false }).limit(5)
 
     const userMessage = this.buildPrompt(company, score, contacts ?? [])
 
@@ -117,7 +117,17 @@ export class TieringAgent extends BaseAgent {
       complianceLevel,
     }
 
-    const tier = classifyTier(dims)                  // deterministic — feasibility, not ICP
+    // Contact readiness — A requires a verified way to reach a key person.
+    const contactList = contacts ?? []
+    const readiness: ContactReadiness = {
+      hasVerifiedKeyContact: contactList.some((c) =>
+        c.email_verified === true || c.email_deliverable === true || (typeof c.phone === 'string' && c.phone.trim().length > 0)),
+      hasAnyContact: contactList.some((c) => (c.full_name && String(c.full_name).trim()) || (c.email && String(c.email).trim())),
+    }
+
+    const natural = naturalTier(dims)
+    const tier = classifyTier(dims, readiness)       // deterministic — feasibility + contact gate
+    const gateNote = contactGateNote(natural, readiness)
     let factoryType = deriveFactoryType(complianceLevel)
 
     // Match against the real factory pool (own may have expired BSCI/WRAP → partner / not ready).
@@ -143,7 +153,7 @@ export class TieringAgent extends BaseAgent {
 
     await supabase.from('companies').update({
       customer_tier:                    tier,
-      tier_reasoning:                   out.tier_reasoning ?? null,
+      tier_reasoning:                   [out.tier_reasoning, gateNote].filter(Boolean).join('\n') || null,
       compliance_level:                 complianceLevel,
       compliance_requirements:          out.compliance_requirements ?? [],
       compliance_blockers:              blockers,

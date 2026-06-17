@@ -72,10 +72,35 @@ function clamp10(n: number): number {
 }
 
 /**
- * Deterministic tier classification from business-feasibility dimensions.
+ * Contact readiness — whether we actually have a usable way to reach this
+ * customer's decision-maker. An A-tier customer must have BOTH a strong product
+ * match AND a verified key-contact channel; otherwise it's an A-in-waiting (B)
+ * until we fill the contact gap. This makes the tier honest about whether the
+ * sales team can act on it today.
+ */
+export interface ContactReadiness {
+  /** A decision-level contact with a verified/deliverable email OR a phone. */
+  hasVerifiedKeyContact: boolean
+  /** Any contact at all (named person or email). */
+  hasAnyContact: boolean
+}
+
+/** Why the contact gate moved the tier (for UI + self-correction prompts). */
+export function contactGateNote(naturalTier: CustomerTier, c: ContactReadiness): string | null {
+  if (naturalTier === 'A' && !c.hasVerifiedKeyContact) {
+    return '⚠ 匹配度达 A，但缺少「已验证的关键人联系方式」，暂列 B —— 补齐关键人已验证邮箱/电话后自动升 A。'
+  }
+  if ((naturalTier === 'A' || naturalTier === 'B') && !c.hasAnyContact) {
+    return '⚠ 暂无任何联系人/联系方式 —— 请先富集或用 Apollo 查决策人，再验证邮箱。'
+  }
+  return null
+}
+
+/**
+ * The "natural" tier from business-feasibility dimensions alone (no contact gate).
  * Order of checks matters: disqualifiers first, then A (strategic), then B, then C.
  */
-export function classifyTier(d: TierDimensions): CustomerTier {
+function classifyTierBase(d: TierDimensions): CustomerTier {
   const scale = clamp10(d.customerScaleScore)
   const product = clamp10(d.productMatchScore)
   const conversion = clamp10(d.conversionFeasibilityScore)
@@ -92,10 +117,11 @@ export function classifyTier(d: TierDimensions): CustomerTier {
   if (risk >= 9 && strategic < 7) return 'D'
 
   // ── A: large strategic account ───────────────────────────────────────────
-  // Big AND strategically valuable — chase long-term regardless of cycle length.
-  if (strategic >= 7 && scale >= 7) return 'A'
+  // A requires a real product match (we must be able to make what they buy) AND
+  // strategic scale. Match degree comes first per the BD standard.
+  if (product >= 6 && strategic >= 7 && scale >= 7) return 'A'
   // Very large brand behind a strict compliance wall = strategic by definition.
-  if (scale >= 8 && highCompliance) return 'A'
+  if (product >= 5 && scale >= 8 && highCompliance) return 'A'
 
   // ── B: best short-term target ────────────────────────────────────────────
   // Winnable now: real order potential, decent match, not a micro-buyer.
@@ -106,6 +132,24 @@ export function classifyTier(d: TierDimensions): CustomerTier {
   if (product >= 4 && conversion >= 3) return 'C'
 
   return 'D'
+}
+
+/**
+ * Deterministic tier classification. When `contact` is supplied, the contact
+ * gate applies: an A customer without a verified key contact is capped to B
+ * (an "A-in-waiting") so the tier reflects what we can actually act on. Omitting
+ * `contact` returns the pure feasibility tier (used by unit tests / scoring-only).
+ */
+export function classifyTier(d: TierDimensions, contact?: ContactReadiness): CustomerTier {
+  const base = classifyTierBase(d)
+  if (!contact) return base
+  if (base === 'A' && !contact.hasVerifiedKeyContact) return 'B'
+  return base
+}
+
+/** The natural (pre-contact-gate) tier — used to detect & explain a cap. */
+export function naturalTier(d: TierDimensions): CustomerTier {
+  return classifyTierBase(d)
 }
 
 /** Map a compliance level to the factory we should route the customer through. */

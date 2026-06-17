@@ -257,7 +257,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                 {company.tier_reasoning && (
                   <div>
                     <span className="text-xs font-medium text-muted-foreground">为什么是这个级别：</span>
-                    <span className="text-xs">{company.tier_reasoning}</span>
+                    <span className="text-xs whitespace-pre-line">{company.tier_reasoning}</span>
                   </div>
                 )}
                 {company.recommended_development_strategy && (
