@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { decodeHtml, TIER_STYLES, SEGMENT_LABELS } from '@/lib/bd/shared'
 import { FACTORY_TYPE_LABELS, COMPLIANCE_LABELS, type RecommendedFactoryType, type ComplianceLevel } from '@/lib/tiering/tiering'
 import { assignLeadToMe, rejectLead } from '@/actions/bd'
-import { generateReport, createOutreachDraftFromReport } from '@/actions/reports'
+import { generateReport } from '@/actions/reports'
 
 export const dynamic = 'force-dynamic'
 
@@ -123,9 +123,8 @@ export default async function BdLeadsPage({ searchParams }: { searchParams: Prom
                   <td className="px-3 py-2">
                     <div className="flex gap-1 flex-wrap">
                       <Link href={`/companies/${c.id}/report`} className="text-[11px] px-2 py-1 border rounded">报告</Link>
-                      {hasReport.has(c.id)
-                        ? <form action={createOutreachDraftFromReport}><input type="hidden" name="companyId" value={c.id} /><button className="text-[11px] px-2 py-1 border rounded">开发信</button></form>
-                        : <form action={generateReport}><input type="hidden" name="companyId" value={c.id} /><button className="text-[11px] px-2 py-1 border rounded">生成报告</button></form>}
+                      <Link href={`/companies/${c.id}/outreach`} className="text-[11px] px-2 py-1 border rounded">开发信</Link>
+                      {!hasReport.has(c.id) && <form action={generateReport}><input type="hidden" name="companyId" value={c.id} /><button className="text-[11px] px-2 py-1 border rounded">生成报告</button></form>}
                       <form action={assignLeadToMe}><input type="hidden" name="companyId" value={c.id} /><button className="text-[11px] px-2 py-1 border rounded">领取</button></form>
                       <form action={rejectLead}><input type="hidden" name="companyId" value={c.id} /><button className="text-[11px] px-2 py-1 border rounded text-muted-foreground">放弃</button></form>
                     </div>

@@ -8,7 +8,7 @@ import {
 } from '@/lib/bd/shared'
 import { completeTask, draftReply } from '@/actions/tasks'
 import { snoozeTask, assignLeadToMe, createQuoteTask, createSampleTask, scheduleFollowup, closeReply, rejectLead } from '@/actions/bd'
-import { generateReport, createOutreachDraftFromReport } from '@/actions/reports'
+import { generateReport } from '@/actions/reports'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +46,7 @@ export default async function BdTodayPage() {
       .order('priority', { ascending: true }).order('due_at', { ascending: true }).limit(25),
     sb.from('outreach_logs').select('id, company_id, subject, created_at, companies(name)')
       .eq('status', 'pending_approval').order('created_at', { ascending: false }).limit(10),
-    sb.from('companies').select('id, name, country, region, customer_tier, target_customer_segment, recommended_development_strategy, compliance_level, compliance_blockers, recommended_factory_type, next_action, product_match, assigned_to, status')
+    sb.from('companies').select('id, name, description, country, region, customer_tier, target_customer_segment, recommended_development_strategy, compliance_level, compliance_blockers, recommended_factory_type, next_action, product_match, assigned_to, status')
       .in('customer_tier', ['A', 'B']).neq('status', 'closed_lost').neq('status', 'closed_won')
       .order('customer_tier', { ascending: true }).order('total_score', { ascending: false }).limit(10),
     sb.from('reply_events').select('id, company_id, from_email, reply_subject, reply_body, reply_intent, reply_sentiment, received_at, companies(name)')
@@ -64,6 +64,18 @@ export default async function BdTodayPage() {
   const comp = (row: { companies?: unknown }) => {
     const c = row.companies as { name?: string; customer_tier?: string } | { name?: string }[] | null
     return Array.isArray(c) ? c[0] : c
+  }
+
+  // Best contact per recommended company (for the card).
+  const recoIds = (recos ?? []).map((c) => c.id)
+  const { data: recoContacts } = recoIds.length
+    ? await sb.from('contacts').select('company_id, full_name, title, email, phone, linkedin_url, email_deliverable')
+        .in('company_id', recoIds).order('contact_priority', { ascending: false })
+    : { data: [] as Array<Record<string, unknown>> }
+  const contactByCompany = new Map<string, Record<string, unknown>>()
+  for (const ct of recoContacts ?? []) {
+    const cid = ct.company_id as string
+    if (cid && !contactByCompany.has(cid)) contactByCompany.set(cid, ct)
   }
 
   const kpis = [
@@ -139,27 +151,54 @@ export default async function BdTodayPage() {
       <section>
         <h2 className="text-sm font-semibold mb-2">今日推荐客户</h2>
         <div className="grid md:grid-cols-2 gap-3">
-          {(recos ?? []).map((c) => (
+          {(recos ?? []).map((c) => {
+            const ct = contactByCompany.get(c.id)
+            const hasContactWay = !!(ct?.email || ct?.phone || ct?.linkedin_url)
+            const emailBad = ct?.email_deliverable === false
+            return (
             <Card key={c.id}><CardContent className="py-3 space-y-2">
+              {/* 1. 级别 + 客户名 */}
               <div className="flex items-center gap-2">
-                {c.customer_tier && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${TIER_STYLES[c.customer_tier]}`}>{c.customer_tier}</span>}
+                {c.customer_tier && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${TIER_STYLES[c.customer_tier]}`}>{c.customer_tier} 级</span>}
                 <Link href={`/companies/${c.id}`} className="font-medium text-sm hover:underline truncate">{decodeHtml(c.name)}</Link>
                 <span className="text-[10px] text-muted-foreground">{c.country ?? c.region ?? ''}</span>
                 {c.target_customer_segment && <Badge variant="outline" className="text-[10px]">{SEGMENT_LABELS[c.target_customer_segment] ?? c.target_customer_segment}</Badge>}
               </div>
-              <p className="text-xs text-muted-foreground">为什么推荐：{recommendReason(c)}</p>
+              {/* 2. 公司简介 */}
+              {c.description && <p className="text-[11px] text-muted-foreground line-clamp-2">{decodeHtml(c.description as string)}</p>}
+              {/* 3. 匹配分析 */}
+              <p className="text-xs"><span className="text-muted-foreground">匹配分析：</span>{recommendReason(c)}</p>
               {Array.isArray(c.compliance_blockers) && c.compliance_blockers.length > 0 && (
                 <p className="text-[11px] text-amber-700">⚠ {(c.compliance_blockers as string[])[0]}</p>
               )}
+              {/* 4. 联系人 + 联系方式 */}
+              <div className="text-[11px] border-t pt-1.5">
+                {ct ? (
+                  <div className="space-y-0.5">
+                    <div><span className="text-muted-foreground">联系人：</span>{(ct.full_name as string) || '（仅职位）'} {ct.title ? `· ${ct.title}` : ''}</div>
+                    <div className="flex gap-2 flex-wrap text-muted-foreground">
+                      {ct.email ? <span className={emailBad ? 'text-red-600 line-through' : ''}>✉ {String(ct.email)}{emailBad ? '（已退信）' : ''}</span> : null}
+                      {ct.phone ? <span>☎ {String(ct.phone)}</span> : null}
+                      {ct.linkedin_url ? <a href={String(ct.linkedin_url)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">LinkedIn</a> : null}
+                    </div>
+                    {(!hasContactWay || emailBad) && <p className="text-red-600">⚠ 联系方式缺失/有误 — 去客户页用 Apollo 查决策人</p>}
+                  </div>
+                ) : (
+                  <p className="text-red-600">⚠ 暂无联系人/联系方式 — 去客户页「用 Apollo 查决策人」补全</p>
+                )}
+              </div>
+              {/* 5. 下一步 */}
               {c.next_action && <p className="text-xs"><span className="text-muted-foreground">下一步：</span>{c.next_action}</p>}
+              {/* 6. 操作 */}
               <div className="flex gap-1.5 flex-wrap pt-1">
                 <Link href={`/companies/${c.id}/report`} className="text-xs px-2 py-1 border rounded-md">看报告</Link>
-                <form action={createOutreachDraftFromReport}><input type="hidden" name="companyId" value={c.id} /><button className="text-xs px-2 py-1 border rounded-md">生成开发信草稿</button></form>
+                <Link href={`/companies/${c.id}/outreach`} className="text-xs px-2 py-1 border rounded-md">生成开发信</Link>
                 {c.assigned_to !== who && <form action={assignLeadToMe}><input type="hidden" name="companyId" value={c.id} /><button className="text-xs px-2 py-1 border rounded-md">分配给我</button></form>}
                 <form action={rejectLead}><input type="hidden" name="companyId" value={c.id} /><button className="text-xs px-2 py-1 border rounded-md text-muted-foreground">放弃</button></form>
               </div>
             </CardContent></Card>
-          ))}
+            )
+          })}
           {!recos?.length && (
             <Card className="md:col-span-2"><CardContent className="py-6 text-sm text-muted-foreground text-center">
               暂无 A/B 级推荐客户。<Link href="/leads/discovery" className="text-primary hover:underline">去运行 Discovery 补充线索 →</Link>

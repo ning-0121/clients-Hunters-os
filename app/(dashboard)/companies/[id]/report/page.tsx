@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { generateReport, createOutreachDraftFromReport, createTaskFromReport, submitReportReview } from '@/actions/reports'
+import { generateReport, createTaskFromReport, submitReportReview } from '@/actions/reports'
 import { recommendFactoryForCompany } from '@/lib/factory/recommend'
 import { FACTORY_DECISION_LABELS } from '@/lib/factory/matcher'
 
@@ -115,10 +115,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
             <input type="hidden" name="companyId" value={id} />
             <button type="submit" className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent">重新生成</button>
           </form>
-          <form action={createOutreachDraftFromReport}>
-            <input type="hidden" name="companyId" value={id} />
-            <button type="submit" className="text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">生成开发信草稿</button>
-          </form>
+          <Link href={`/companies/${id}/outreach`} className="text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">开发信工作台</Link>
           <form action={createTaskFromReport}>
             <input type="hidden" name="companyId" value={id} />
             <button type="submit" className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent">创建任务</button>

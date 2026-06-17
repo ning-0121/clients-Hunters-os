@@ -7,7 +7,7 @@ import { triggerScoreCompany, triggerEnrichCompany } from '@/actions/companies'
 import { triggerTierCompany } from '@/actions/tiering'
 import { triggerCustomsLookup, saveCustomsNotes } from '@/actions/customs'
 import { triggerApolloLookup } from '@/actions/apollo'
-import { generateReport, createOutreachDraftFromReport, createTaskFromReport } from '@/actions/reports'
+import { generateReport, createTaskFromReport } from '@/actions/reports'
 import { createSample } from '@/actions/samples'
 import { createOrder, confirmOrder } from '@/actions/orders'
 import {
@@ -229,12 +229,6 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               <Link href={`/companies/${id}/report`} className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">
                 查看报告
               </Link>
-              <form action={createOutreachDraftFromReport}>
-                <input type="hidden" name="companyId" value={id} />
-                <button type="submit" className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">
-                  从报告生成开发信
-                </button>
-              </form>
             </>
           )}
           <Link href={`/companies/${id}/outreach`} className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">

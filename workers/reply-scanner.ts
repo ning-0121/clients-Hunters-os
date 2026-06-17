@@ -176,6 +176,17 @@ async function scanInbox(): Promise<ParsedEmail[]> {
   return results
 }
 
+// ── Bounce / delivery-failure detection ───────────────────────────────────────
+function isBounce(from: string, subject: string, body: string): boolean {
+  const f = (from ?? '').toLowerCase()
+  const s = (subject ?? '').toLowerCase()
+  const b = (body ?? '').toLowerCase().slice(0, 1000)
+  if (/mailer-daemon|postmaster@|mail delivery (system|subsystem)|no-?reply@.*(mail|delivery)/.test(f)) return true
+  if (/delivery status notification|undelivered mail returned|mail delivery (failed|subsystem)|returned to sender|failure notice|delivery has failed|delivery incomplete/.test(s)) return true
+  if (/address (not found|couldn'?t be found)|recipient.*(not found|rejected|does not exist)|550[ -]|no such user|user unknown|mailbox (unavailable|full|not found)/.test(b)) return true
+  return false
+}
+
 // ── Sentiment + intent classifiers ────────────────────────────────────────────
 
 function classifySentiment(body: string): string {
@@ -253,6 +264,24 @@ async function processReplies(emails: ParsedEmail[]): Promise<number> {
       }
     }
     if (!matchedLog) continue
+
+    // Bounce / delivery-failure detection — these are NOT customer replies.
+    // Mark the contact's email as bad so we stop using it, flag the send as
+    // bounced, and DON'T create a "客户回复待处理" task.
+    if (isBounce(email.from, email.subject, email.body)) {
+      if (matchedLog.contact_id) {
+        await sb.from('contacts').update({ email_deliverable: false, status: 'bad_email' }).eq('id', matchedLog.contact_id)
+      }
+      await sb.from('outreach_logs').update({ status: 'bounced' }).eq('id', matchedLog.id)
+      await sb.from('reply_events').insert({
+        outreach_log_id: matchedLog.id, company_id: matchedLog.company_id, contact_id: matchedLog.contact_id,
+        gmail_message_id: email.messageId, from_email: email.from, reply_subject: email.subject,
+        reply_body: email.body.slice(0, 500), reply_sentiment: 'bounce', reply_intent: 'bounce',
+        received_at: email.date.toISOString(),
+      })
+      console.log(`[ReplyScanner] ↩︎ bounce ignored: ${email.subject}`)
+      continue
+    }
 
     const sentiment = classifySentiment(email.body)
     const intent    = classifyIntent(email.body)

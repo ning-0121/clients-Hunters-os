@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { decodeHtml, TIER_STYLES, SEGMENT_LABELS } from '@/lib/bd/shared'
-import { createOutreachDraftFromReport, createTaskFromReport } from '@/actions/reports'
+import { createTaskFromReport } from '@/actions/reports'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,7 +92,7 @@ export default async function BdReportsPage({ searchParams }: { searchParams: Pr
                 {blockers.length > 0 && <p className="text-[11px] text-amber-700">⚠ {blockers[0]}</p>}
                 <div className="flex gap-1.5 flex-wrap pt-1">
                   <Link href={`/companies/${r.company_id}/report`} className="text-xs px-2 py-1 border rounded-md">打开 / 评审</Link>
-                  <form action={createOutreachDraftFromReport}><input type="hidden" name="companyId" value={r.company_id} /><button className="text-xs px-2 py-1 border rounded-md">开发信草稿</button></form>
+                  <Link href={`/companies/${r.company_id}/outreach`} className="text-xs px-2 py-1 border rounded-md">开发信</Link>
                   <form action={createTaskFromReport}><input type="hidden" name="companyId" value={r.company_id} /><button className="text-xs px-2 py-1 border rounded-md">建任务</button></form>
                 </div>
               </CardContent></Card>
