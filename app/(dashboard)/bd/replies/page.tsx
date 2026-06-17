@@ -6,6 +6,7 @@ import {
 } from '@/lib/bd/shared'
 import { draftReply } from '@/actions/tasks'
 import { createQuoteTask, createSampleTask, closeReply, assignReplyToManager } from '@/actions/bd'
+import { reprocessReplies } from '@/actions/reply-reprocess'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,12 @@ export default async function BdRepliesPage() {
 
   return (
     <div className="p-6 max-w-5xl space-y-6">
-      <div><h1 className="text-2xl font-bold">回复收件箱</h1><p className="text-sm text-muted-foreground mt-1">{total} 条回复 · 按 AI 意图分组 · 不会自动发送</p></div>
+      <div className="flex items-start justify-between gap-3">
+        <div><h1 className="text-2xl font-bold">回复收件箱</h1><p className="text-sm text-muted-foreground mt-1">{total} 条回复 · 按 AI 意图分组 · 不会自动发送</p></div>
+        <form action={reprocessReplies}>
+          <button className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent shrink-0">重新识别历史回复</button>
+        </form>
+      </div>
 
       {total === 0 && <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">暂无客户回复。发送开发信后，回复会自动归类到这里。</CardContent></Card>}
 

@@ -10,6 +10,10 @@ import { triggerApolloLookup } from '@/actions/apollo'
 import { verifyContactEmails } from '@/actions/email'
 import { flagCompanyData, clearCompanyFlag } from '@/actions/data-quality'
 import { triggerDomesticContactLookup } from '@/actions/domestic-contacts'
+import { triggerIntentScan } from '@/actions/intent'
+import { computeCredibility } from '@/lib/contacts/credibility'
+import { computeIntent, INTENT_BADGE } from '@/lib/intent/intent'
+import { classifyRole, ROLE_LABELS } from '@/lib/contacts/roles'
 import { generateReport, createTaskFromReport } from '@/actions/reports'
 import { createSample } from '@/actions/samples'
 import { createOrder, confirmOrder } from '@/actions/orders'
@@ -174,6 +178,14 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                 总分 {company.total_score.toFixed(0)}/100
               </span>
             )}
+            {(() => {
+              const it = computeIntent(company)
+              return <span className={`text-sm font-bold px-3 py-1 rounded-full ${INTENT_BADGE[it.level].cls}`} title={it.reason}>意图 {it.score}/10</span>
+            })()}
+            <form action={triggerIntentScan}>
+              <input type="hidden" name="companyId" value={id} />
+              <button type="submit" className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent">刷新意图</button>
+            </form>
           </div>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             {company.website && (
@@ -657,22 +669,24 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               })()}
               {contacts && contacts.length > 0 ? contacts.map((contact) => (
                 <div key={contact.id} className="border-b last:border-0 pb-3 last:pb-0">
-                  <div className="font-medium text-sm">{contact.full_name ?? 'Unknown'}</div>
+                  <div className="font-medium text-sm flex items-center gap-1.5">
+                    {contact.full_name ?? 'Unknown'}
+                    <Badge variant="outline" className="text-[10px]">{ROLE_LABELS[classifyRole(contact.title)]}</Badge>
+                  </div>
                   <div className="text-xs text-muted-foreground">{contact.title}</div>
-                  {contact.email ? (
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      <a href={`mailto:${contact.email}`} className={`text-xs hover:underline ${contact.email_deliverable === false ? 'text-muted-foreground line-through' : 'text-blue-600'}`}>
-                        {contact.email}
-                      </a>
-                      {contact.email_verified
-                        ? <span className="text-[10px] px-1 rounded bg-green-100 text-green-700">✓已验证</span>
-                        : contact.email_deliverable === false
-                          ? <span className="text-[10px] px-1 rounded bg-red-100 text-red-700">✗不可达</span>
-                          : <span className="text-[10px] px-1 rounded bg-amber-100 text-amber-700">未验证</span>}
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-amber-700 mt-0.5">⚠ 无邮箱 — 点「验证邮箱」尝试查找</div>
-                  )}
+                  {(() => {
+                    const cred = computeCredibility(contact)
+                    if (!contact.email) return <div className="text-[11px] text-amber-700 mt-0.5">⚠ 无邮箱 — 点「验证邮箱」或「查国内联系方式」</div>
+                    return (
+                      <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <a href={`mailto:${contact.email}`} className={`text-xs hover:underline ${cred.tier === 'guessed' && contact.email_deliverable === false ? 'text-muted-foreground line-through' : 'text-blue-600'}`}>
+                          {contact.email}
+                        </a>
+                        <span className={`text-[10px] px-1 rounded ${cred.badgeClass}`}>{cred.tierLabel}</span>
+                        <span className="text-[10px] text-muted-foreground">{cred.riskLabel} · {cred.sourceLabel}</span>
+                      </div>
+                    )
+                  })()}
                   {contact.linkedin_url && (
                     <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline block">
                       LinkedIn

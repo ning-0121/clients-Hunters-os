@@ -20,6 +20,10 @@
 import { ImapFlow, type ImapFlowOptions } from 'imapflow'
 import { createDirectClient } from '@/lib/supabase/server'
 import { notify } from '@/lib/notify/notifier'
+import {
+  cleanReplyBody, isBounce as isBounceShared, classifySentiment as classifySentimentShared,
+  classifyReplyIntent, NON_ACTIONABLE_INTENTS,
+} from '@/lib/email/reply-intel'
 
 const SCAN_INTERVAL_MS   = 5 * 60 * 1000
 const HEARTBEAT_INTERVAL = 60 * 1000
@@ -149,16 +153,8 @@ async function scanInbox(): Promise<ParsedEmail[]> {
 
           if (!inReplyTo && references.length === 0) continue
 
-          // Strip quoted reply history before classification to avoid false-positive intent
-          const rawBody = raw.split(/\r?\n\r?\n/).slice(1).join('\n')
-          const body = rawBody
-            .replace(/^>.*$/gm, '')                         // lines starting with >
-            .replace(/^On .{0,120}wrote:$/gm, '')           // "On ... wrote:"
-            .replace(/^-{3,}.*$/gm, '')                     // --- dividers
-            .replace(/^From:.*$/gim, '')                    // forwarded From: lines
-            .replace(/\n{3,}/g, '\n\n')                     // collapse blank lines
-            .trim()
-            .slice(0, 2000)
+          // Extract a clean text body (handles multipart MIME) before classification
+          const body = cleanReplyBody(raw)
           results.push({ messageId, inReplyTo, references, from, subject, body, date })
         } catch {
           continue
@@ -176,40 +172,9 @@ async function scanInbox(): Promise<ParsedEmail[]> {
   return results
 }
 
-// ── Bounce / delivery-failure detection ───────────────────────────────────────
-function isBounce(from: string, subject: string, body: string): boolean {
-  const f = (from ?? '').toLowerCase()
-  const s = (subject ?? '').toLowerCase()
-  const b = (body ?? '').toLowerCase().slice(0, 1000)
-  if (/mailer-daemon|postmaster@|mail delivery (system|subsystem)|no-?reply@.*(mail|delivery)/.test(f)) return true
-  if (/delivery status notification|undelivered mail returned|mail delivery (failed|subsystem)|returned to sender|failure notice|delivery has failed|delivery incomplete/.test(s)) return true
-  if (/address (not found|couldn'?t be found)|recipient.*(not found|rejected|does not exist)|550[ -]|no such user|user unknown|mailbox (unavailable|full|not found)/.test(b)) return true
-  return false
-}
-
-// ── Sentiment + intent classifiers ────────────────────────────────────────────
-
-function classifySentiment(body: string): string {
-  const lower = body.toLowerCase()
-  const neg = ['not interested','unsubscribe','remove me','stop emailing','no thanks','wrong person']
-  const pos = ['interested','tell me more','sounds good','let\'s talk','schedule','would love',
-                'send catalog','pricing','sample','quote','love to','can we']
-  if (neg.some(w => lower.includes(w))) return 'not_interested'
-  if (pos.some(w => lower.includes(w))) return 'positive'
-  return 'neutral'
-}
-
-function classifyIntent(body: string): string {
-  const lower = body.toLowerCase()
-  if (lower.includes('sample'))                                                    return 'want_sample'
-  if (lower.includes('catalog') || lower.includes('catalogue'))                   return 'want_catalog'
-  if (lower.includes('price') || lower.includes('quote') || lower.includes('cost')) return 'want_quote'
-  if (lower.includes('call') || lower.includes('meeting') || lower.includes('zoom') ||
-      lower.includes('schedule') || lower.includes('chat'))                       return 'want_meeting'
-  if (lower.includes('not interested') || lower.includes('unsubscribe'))          return 'not_interested'
-  if (lower.includes('wrong person'))                                              return 'wrong_person'
-  return 'general_reply'
-}
+// Bounce + classifiers now live in lib/email/reply-intel.ts (shared with reprocess).
+const isBounce = isBounceShared
+const classifySentiment = classifySentimentShared
 
 /**
  * Map reply intent + sentiment to the correct pipeline status.
@@ -284,7 +249,7 @@ async function processReplies(emails: ParsedEmail[]): Promise<number> {
     }
 
     const sentiment = classifySentiment(email.body)
-    const intent    = classifyIntent(email.body)
+    const intent    = classifyReplyIntent(email.from, email.subject, email.body)
     const now       = new Date().toISOString()
 
     // 1. Upsert conversation (or get existing)
@@ -374,7 +339,7 @@ async function processReplies(emails: ParsedEmail[]): Promise<number> {
       .in('status', ['scheduled', 'queued'])
 
     // 6. Create a task so a salesperson actually acts on this reply (post-reply workflow)
-    if (sentiment !== 'not_interested' && intent !== 'not_interested' && intent !== 'wrong_person') {
+    if (sentiment !== 'not_interested' && !NON_ACTIONABLE_INTENTS.has(intent)) {
       const { taskType, priority, title, suggestion } = taskForReply(intent, sentiment, email.subject)
       await sb.from('tasks').insert({
         company_id:       matchedLog.company_id,
