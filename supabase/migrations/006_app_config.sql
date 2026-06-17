@@ -10,12 +10,19 @@ CREATE TABLE IF NOT EXISTS app_config (
   daily_quota             INT DEFAULT 20,
   segments                JSONB DEFAULT '["overseas","domestic","recruitment"]'::jsonb,
   sales_focus             TEXT DEFAULT 'activewear',  -- activewear | activewear_first | software
+  salespeople             JSONB DEFAULT '[]'::jsonb,
+  assign_quota            JSONB DEFAULT '{"A":5,"B":10,"C":15}'::jsonb,
+  last_assignment         JSONB,
   updated_at              TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT app_config_singleton CHECK (id = 'singleton')
 );
 
 -- For tables created before sales_focus existed:
 ALTER TABLE app_config ADD COLUMN IF NOT EXISTS sales_focus TEXT DEFAULT 'activewear';
+-- Salesperson roster + per-person assignment quota (5A/10B/15C):
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS salespeople JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS assign_quota JSONB DEFAULT '{"A":5,"B":10,"C":15}'::jsonb;
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS last_assignment JSONB;
 
 INSERT INTO app_config (id) VALUES ('singleton') ON CONFLICT (id) DO NOTHING;
 

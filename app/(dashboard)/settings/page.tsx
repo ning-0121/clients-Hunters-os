@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { getAppConfig, SEGMENT_LABELS, SALES_FOCUS_LABELS, type DiscoverySegment, type SalesFocus } from '@/lib/config'
 import { saveAutoDiscoveryConfig, saveSalesFocus } from '@/actions/settings'
+import { saveTeamConfig } from '@/actions/assignment'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -150,6 +151,36 @@ export default async function SettingsPage() {
             <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
               保存
             </button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* ── 销售团队 + 分派配额 ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            销售团队 / 分派配额
+            <Badge variant="secondary" className="text-xs font-normal">{cfg.salespeople.length} 名销售</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={saveTeamConfig} className="space-y-4">
+            <div className="text-sm">
+              <label className="text-xs text-muted-foreground block mb-1">销售名册（每行一个邮箱/名字，须与登录身份一致）</label>
+              <textarea name="salespeople" rows={4} defaultValue={cfg.salespeople.join('\n')}
+                placeholder={'alex@jojofashion.us\nsales2@jojofashion.us'}
+                className="w-full px-3 py-2 border rounded-md bg-background font-mono text-xs" />
+            </div>
+            <div className="flex gap-3 text-sm">
+              <div><label className="text-xs text-muted-foreground block mb-1">A 级/人</label>
+                <input type="number" name="quotaA" min={0} max={100} defaultValue={cfg.assignQuota.A} className="w-20 px-3 py-1.5 border rounded-md bg-background" /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">B 级/人</label>
+                <input type="number" name="quotaB" min={0} max={200} defaultValue={cfg.assignQuota.B} className="w-20 px-3 py-1.5 border rounded-md bg-background" /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">C 级/人</label>
+                <input type="number" name="quotaC" min={0} max={300} defaultValue={cfg.assignQuota.C} className="w-20 px-3 py-1.5 border rounded-md bg-background" /></div>
+            </div>
+            <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存</button>
+            <p className="text-[11px] text-muted-foreground">在「经理 · BD 看板」点「分派今日客户」即可按配额把<strong>有联系方式</strong>的客户派给每名销售。联系方式不全的客户不会被分派。</p>
           </form>
         </CardContent>
       </Card>

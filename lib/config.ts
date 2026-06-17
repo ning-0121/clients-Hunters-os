@@ -10,18 +10,29 @@ export type DiscoverySegment = 'overseas' | 'domestic' | 'recruitment'
 /** What we primarily sell — drives report + outreach framing. */
 export type SalesFocus = 'activewear' | 'activewear_first' | 'software'
 
+/** Per-salesperson assignment quota by tier. */
+export interface AssignQuota { A: number; B: number; C: number }
+
 export interface AppConfig {
   autoDiscoveryEnabled: boolean
   dailyQuota: number
   segments: DiscoverySegment[]
   salesFocus: SalesFocus
+  /** Roster of salesperson identities (email or name used in companies.assigned_to). */
+  salespeople: string[]
+  /** How many of each tier each salesperson should hold. */
+  assignQuota: AssignQuota
 }
+
+export const DEFAULT_ASSIGN_QUOTA: AssignQuota = { A: 5, B: 10, C: 15 }
 
 export const DEFAULT_CONFIG: AppConfig = {
   autoDiscoveryEnabled: false,
   dailyQuota: 20,
   segments: ['overseas', 'domestic', 'recruitment'],
   salesFocus: 'activewear',   // QIMO default: sell activewear, do NOT pitch software
+  salespeople: [],
+  assignQuota: DEFAULT_ASSIGN_QUOTA,
 }
 
 export const SALES_FOCUS_LABELS: Record<SalesFocus, string> = {
@@ -57,11 +68,21 @@ export async function getAppConfig(): Promise<AppConfig> {
     if (error || !data) return DEFAULT_CONFIG
     const segments = Array.isArray(data.segments) ? (data.segments as DiscoverySegment[]) : DEFAULT_CONFIG.segments
     const sf = data.sales_focus
+    const people = Array.isArray(data.salespeople)
+      ? (data.salespeople as unknown[]).map(String).map((s) => s.trim()).filter(Boolean)
+      : DEFAULT_CONFIG.salespeople
+    const q = (data.assign_quota ?? {}) as Partial<AssignQuota>
     return {
       autoDiscoveryEnabled: !!data.auto_discovery_enabled,
       dailyQuota: typeof data.daily_quota === 'number' ? data.daily_quota : 20,
       segments: segments.length ? segments : DEFAULT_CONFIG.segments,
       salesFocus: (sf === 'activewear' || sf === 'activewear_first' || sf === 'software') ? sf : DEFAULT_CONFIG.salesFocus,
+      salespeople: people,
+      assignQuota: {
+        A: typeof q.A === 'number' ? q.A : DEFAULT_ASSIGN_QUOTA.A,
+        B: typeof q.B === 'number' ? q.B : DEFAULT_ASSIGN_QUOTA.B,
+        C: typeof q.C === 'number' ? q.C : DEFAULT_ASSIGN_QUOTA.C,
+      },
     }
   } catch {
     return DEFAULT_CONFIG

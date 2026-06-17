@@ -1,6 +1,8 @@
 import { createServiceClient as createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { getAppConfig } from '@/lib/config'
+import { triggerDailyAssignment } from '@/actions/assignment'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +25,10 @@ export default async function ManagerBdDashboard() {
     sb.from('orders').select('*', { count: 'exact', head: true }),
     sb.from('samples').select('*', { count: 'exact', head: true }),
   ])
+
+  const cfg = await getAppConfig()
+  const { data: cfgRow } = await sb.from('app_config').select('last_assignment').eq('id', 'singleton').maybeSingle()
+  const lastAssignment = cfgRow?.last_assignment as { ranAt?: string; note?: string } | null
 
   const C = companies ?? [], T = tasks ?? [], R = replies ?? [], O = outreach ?? []
   const reportSet = new Set((reports ?? []).map((r) => r.company_id).filter(Boolean) as string[])
@@ -90,6 +96,19 @@ export default async function ManagerBdDashboard() {
     { label: '高价值客户无负责人', items: highValueNoOwner.map((c) => ({ id: c.id, name: c.name })) },
   ]
 
+  // Assignment: per-salesperson tier holdings vs quota.
+  const activeC = C.filter((c) => c.status !== 'closed_lost' && c.status !== 'closed_won')
+  const holdings = cfg.salespeople.map((p) => {
+    const mine = activeC.filter((c) => c.assigned_to === p)
+    return {
+      who: p,
+      A: mine.filter((c) => c.customer_tier === 'A').length,
+      B: mine.filter((c) => c.customer_tier === 'B').length,
+      C: mine.filter((c) => c.customer_tier === 'C').length,
+    }
+  })
+  const q = cfg.assignQuota
+
   const Kpi = ({ label, value, warn }: { label: string; value: number; warn?: boolean }) => (
     <Card><CardContent className="py-3"><div className={`text-2xl font-bold ${warn && value > 0 ? 'text-red-600' : ''}`}>{value}</div><div className="text-xs text-muted-foreground mt-0.5">{label}</div></CardContent></Card>
   )
@@ -97,6 +116,44 @@ export default async function ManagerBdDashboard() {
   return (
     <div className="p-6 max-w-6xl space-y-6">
       <div><h1 className="text-2xl font-bold">BD 经理看板</h1><p className="text-sm text-muted-foreground mt-1">团队工作量 · 漏斗 · 业绩 · 客户质量 · 风险</p></div>
+
+      {/* ── 客户分派 ── */}
+      <section>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold">客户分派（每人 {q.A}A / {q.B}B / {q.C}C）</h2>
+          <form action={triggerDailyAssignment}>
+            <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">分派今日客户</button>
+          </form>
+        </div>
+        {cfg.salespeople.length === 0 ? (
+          <Card><CardContent className="py-6 text-center text-sm text-muted-foreground">
+            还没有销售名册。<Link href="/settings" className="text-primary hover:underline">去「设置 → 销售团队」添加销售 →</Link>
+          </CardContent></Card>
+        ) : (
+          <Card><CardContent className="py-0 px-0">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b text-muted-foreground"><tr>{['销售', `A (${q.A})`, `B (${q.B})`, `C (${q.C})`, '合计'].map((h) => <th key={h} className="text-left px-3 py-2 font-medium">{h}</th>)}</tr></thead>
+              <tbody className="divide-y">
+                {holdings.map((h) => {
+                  const cell = (n: number, target: number) => <span className={n < target ? 'text-amber-600' : 'text-green-600'}>{n}/{target}</span>
+                  return (
+                    <tr key={h.who}>
+                      <td className="px-3 py-2 font-medium">{h.who}</td>
+                      <td className="px-3 py-2">{cell(h.A, q.A)}</td>
+                      <td className="px-3 py-2">{cell(h.B, q.B)}</td>
+                      <td className="px-3 py-2">{cell(h.C, q.C)}</td>
+                      <td className="px-3 py-2 font-medium">{h.A + h.B + h.C}/{q.A + q.B + q.C}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </CardContent></Card>
+        )}
+        {lastAssignment?.note && (
+          <p className="text-[11px] text-muted-foreground mt-2">上次分派：{lastAssignment.ranAt ? new Date(lastAssignment.ranAt).toLocaleString() : ''} —— {lastAssignment.note}</p>
+        )}
+      </section>
 
       <section>
         <h2 className="text-sm font-semibold mb-2">团队任务概览</h2>

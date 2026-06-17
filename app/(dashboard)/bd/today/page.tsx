@@ -47,8 +47,8 @@ export default async function BdTodayPage() {
     sb.from('outreach_logs').select('id, company_id, subject, created_at, companies(name)')
       .eq('status', 'pending_approval').order('created_at', { ascending: false }).limit(10),
     sb.from('companies').select('id, name, description, country, region, customer_tier, target_customer_segment, recommended_development_strategy, compliance_level, compliance_blockers, recommended_factory_type, next_action, product_match, assigned_to, status')
-      .in('customer_tier', ['A', 'B']).neq('status', 'closed_lost').neq('status', 'closed_won')
-      .order('customer_tier', { ascending: true }).order('total_score', { ascending: false }).limit(10),
+      .eq('assigned_to', who).in('customer_tier', ['A', 'B', 'C']).neq('status', 'closed_lost').neq('status', 'closed_won')
+      .order('customer_tier', { ascending: true }).order('total_score', { ascending: false }).limit(30),
     sb.from('reply_events').select('id, company_id, from_email, reply_subject, reply_body, reply_intent, reply_sentiment, received_at, companies(name)')
       .order('received_at', { ascending: false }).limit(12),
     sb.from('followup_runs').select('id, company_id, step, status, scheduled_for, companies(name, customer_tier)')
@@ -149,7 +149,7 @@ export default async function BdTodayPage() {
 
       {/* 今日推荐客户 */}
       <section>
-        <h2 className="text-sm font-semibold mb-2">今日推荐客户</h2>
+        <h2 className="text-sm font-semibold mb-2">我的客户（{recos?.length ?? 0}）</h2>
         <div className="grid md:grid-cols-2 gap-3">
           {(recos ?? []).map((c) => {
             const ct = contactByCompany.get(c.id)
@@ -201,7 +201,7 @@ export default async function BdTodayPage() {
           })}
           {!recos?.length && (
             <Card className="md:col-span-2"><CardContent className="py-6 text-sm text-muted-foreground text-center">
-              暂无 A/B 级推荐客户。<Link href="/leads/discovery" className="text-primary hover:underline">去运行 Discovery 补充线索 →</Link>
+              还没有分派给你（{who}）的客户。请让经理在「BD 经理看板」点「分派今日客户」，或<Link href="/bd/leads" className="text-primary hover:underline">去客户池自行领取 →</Link>
             </CardContent></Card>
           )}
         </div>
