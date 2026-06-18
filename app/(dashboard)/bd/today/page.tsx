@@ -49,8 +49,8 @@ export default async function BdTodayPage() {
     sb.from('tasks').select('*, companies(name, customer_tier)')
       .in('status', ['open', 'in_progress'])
       .order('priority', { ascending: true }).order('due_at', { ascending: true }).limit(25),
-    sb.from('outreach_logs').select('id, company_id, subject, created_at, companies(name)')
-      .eq('status', 'pending_approval').order('created_at', { ascending: false }).limit(10),
+    sb.from('approvals').select('id, company_id, title, approval_type, created_at, companies(name)')
+      .eq('status', 'pending').order('created_at', { ascending: false }).limit(10),
     sb.from('companies').select('id, name, description, country, region, city, website, instagram_handle, tiktok_handle, linkedin_url, data_flag, customer_tier, target_customer_segment, recommended_development_strategy, compliance_level, compliance_blockers, recommended_factory_type, next_action, product_match, assigned_to, status, hiring_signal, hiring_roles, recruitment_signals, management_pain_signals, new_products_detected, funding_detected, trigger_type, trigger_detail')
       .eq('assigned_to', who).in('customer_tier', ['A', 'B', 'C']).neq('status', 'closed_lost').neq('status', 'closed_won')
       .order('customer_tier', { ascending: true }).order('total_score', { ascending: false }).limit(30),
@@ -73,6 +73,11 @@ export default async function BdTodayPage() {
     const c = row.companies as { name?: string; customer_tier?: string } | { name?: string }[] | null
     return Array.isArray(c) ? c[0] : c
   }
+
+  // Drop system emails (bounce / auto-reply / unsubscribe) from the reply box —
+  // they're not customer replies and must not show action buttons or raw MIME.
+  const SYSTEM_INTENTS = new Set(['bounce', 'auto_reply', 'unsubscribe'])
+  const actionableReplies = (replies ?? []).filter((r) => !SYSTEM_INTENTS.has(String(r.reply_intent)))
 
   // Best contact per recommended company (for the card).
   const recoIds = (recos ?? []).map((c) => c.id)
@@ -98,12 +103,12 @@ export default async function BdTodayPage() {
     .slice(0, 15)
 
   const kpis = [
-    { label: '我的客户', value: assignedCount ?? 0 },
-    { label: '今日已发送', value: sentCount ?? 0 },
-    { label: '今日回复', value: replyCount ?? 0 },
-    { label: '报价机会', value: quoteCount ?? 0 },
-    { label: '样品机会', value: sampleCount ?? 0 },
-    { label: '逾期任务', value: overdueCount ?? 0, warn: (overdueCount ?? 0) > 0 },
+    { label: '我的客户', value: assignedCount ?? 0, href: '/companies' },
+    { label: '今日已发送', value: sentCount ?? 0, href: '/outreach' },
+    { label: '今日回复', value: replyCount ?? 0, href: '/bd/replies' },
+    { label: '报价机会', value: quoteCount ?? 0, href: '/tasks' },
+    { label: '样品机会', value: sampleCount ?? 0, href: '/samples' },
+    { label: '逾期任务', value: overdueCount ?? 0, warn: (overdueCount ?? 0) > 0, href: '/tasks' },
   ]
 
   return (
@@ -116,10 +121,12 @@ export default async function BdTodayPage() {
       {/* 今日数据 */}
       <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
         {kpis.map((k) => (
-          <Card key={k.label}><CardContent className="py-3">
-            <div className={`text-2xl font-bold ${k.warn ? 'text-red-600' : ''}`}>{k.value}</div>
-            <div className="text-xs text-muted-foreground mt-0.5">{k.label}</div>
-          </CardContent></Card>
+          <Link key={k.label} href={k.href} className="block">
+            <Card className="hover:bg-accent/40 hover:ring-foreground/20 transition-colors h-full cursor-pointer"><CardContent className="py-3">
+              <div className={`text-2xl font-bold ${k.warn ? 'text-red-600' : ''}`}>{k.value}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{k.label}</div>
+            </CardContent></Card>
+          </Link>
         ))}
       </div>
 
@@ -134,7 +141,7 @@ export default async function BdTodayPage() {
                 <div>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 mr-2">待审批</span>
                   <span className="font-medium text-sm">{decodeHtml(c?.name ?? '客户')}</span>
-                  <span className="text-xs text-muted-foreground ml-2">{a.subject ?? '草稿待审批'}</span>
+                  <span className="text-xs text-muted-foreground ml-2">{a.title ?? '待审批'}</span>
                 </div>
                 <Link href="/approvals" className="text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md">去处理</Link>
               </CardContent></Card>
@@ -235,6 +242,7 @@ export default async function BdTodayPage() {
               {/* 1. 级别 + 客户名 */}
               <div className="flex items-center gap-2">
                 {c.customer_tier && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${TIER_STYLES[c.customer_tier]}`}>{c.customer_tier} 级</span>}
+                {c.status === 'awaiting_contact' && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">⏸ 待联系方式</span>}
                 <Link href={`/companies/${c.id}`} className="font-medium text-sm hover:underline truncate">{decodeHtml(c.name)}</Link>
                 <span className="text-[10px] text-muted-foreground">{c.country ?? c.region ?? ''}</span>
                 {c.target_customer_segment && <Badge variant="outline" className="text-[10px]">{SEGMENT_LABELS[c.target_customer_segment] ?? c.target_customer_segment}</Badge>}
@@ -300,7 +308,7 @@ export default async function BdTodayPage() {
       <section>
         <h2 className="text-sm font-semibold mb-2 flex items-center gap-2">客户回复箱 <Link href="/bd/replies" className="text-xs text-primary hover:underline">全部 →</Link></h2>
         <div className="space-y-2">
-          {(replies ?? []).slice(0, 6).map((r) => {
+          {actionableReplies.slice(0, 6).map((r) => {
             const c = comp(r); const g = replyGroupOf(r.reply_intent, r.reply_sentiment)
             return (
               <Card key={r.id}><CardContent className="py-3">
@@ -319,7 +327,7 @@ export default async function BdTodayPage() {
               </CardContent></Card>
             )
           })}
-          {!replies?.length && <Card><CardContent className="py-6 text-sm text-muted-foreground text-center">今天没有待处理回复。</CardContent></Card>}
+          {!actionableReplies.length && <Card><CardContent className="py-6 text-sm text-muted-foreground text-center">今天没有待处理回复。</CardContent></Card>}
         </div>
       </section>
 

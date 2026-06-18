@@ -2,6 +2,7 @@ export type CompanyStatus =
   | 'raw'
   | 'enriched'
   | 'scored'
+  | 'awaiting_contact'   // good fit but no reachable contact yet — parked, AI re-finds
   | 'outreach'
   | 'engaged'
   | 'qualified'

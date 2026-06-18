@@ -16,6 +16,7 @@ import {
 import { matchFactory } from '@/lib/factory/matcher'
 import { loadFactoryPool } from '@/lib/factory/recommend'
 import { extractJson } from '@/lib/llm/json'
+import { hasValidContact } from '@/lib/contacts/readiness'
 
 // Valid target_customer_segment enum values (the column is an enum, NOT free prose).
 const SEGMENT_ENUM = new Set([
@@ -77,7 +78,7 @@ export class TieringAgent extends BaseAgent {
     const { data: score } = await supabase
       .from('customer_scores').select('*').eq('company_id', companyId).single()
     const { data: contacts } = await supabase
-      .from('contacts').select('full_name, title, email, email_verified, email_deliverable, phone, decision_level')
+      .from('contacts').select('full_name, title, email, email_verified, email_deliverable, email_confidence, email_source, phone, whatsapp, decision_level')
       .eq('company_id', companyId).order('contact_priority', { ascending: false }).limit(5)
 
     const userMessage = this.buildPrompt(company, score, contacts ?? [])
@@ -129,6 +130,17 @@ export class TieringAgent extends BaseAgent {
     const natural = naturalTier(dims)
     const tier = classifyTier(dims, readiness)       // deterministic — feasibility + contact gate
     const gateNote = contactGateNote(natural, readiness)
+
+    // Contact-validity gate: a good-fit company with NO reachable contact
+    // (verified email OR usable phone/WhatsApp) is parked — flagged in the pool,
+    // kept out of outreach, and re-enriched periodically until a contact lands.
+    const reachable = hasValidContact(contactList)
+    const earlyStage = ['raw', 'enriched', 'scored'].includes(company.status as string)
+    const parked = !reachable && earlyStage
+    const parkNote = parked
+      ? '⛔ 暂无有效联系方式（已验证邮箱 / 有效电话/WhatsApp 均无）→ 已入池等待补齐联系人；AI 将定期重找，找到后再进入开发。'
+      : null
+
     let factoryType = deriveFactoryType(complianceLevel)
 
     // Match against the real factory pool (own may have expired BSCI/WRAP → partner / not ready).
@@ -153,8 +165,9 @@ export class TieringAgent extends BaseAgent {
     }
 
     await supabase.from('companies').update({
+      ...(parked ? { status: 'awaiting_contact' } : {}),
       customer_tier:                    tier,
-      tier_reasoning:                   [out.tier_reasoning, gateNote].filter(Boolean).join('\n') || null,
+      tier_reasoning:                   [out.tier_reasoning, gateNote, parkNote].filter(Boolean).join('\n') || null,
       compliance_level:                 complianceLevel,
       compliance_requirements:          out.compliance_requirements ?? [],
       compliance_blockers:              blockers,
@@ -173,9 +186,12 @@ export class TieringAgent extends BaseAgent {
       updated_at:                       new Date().toISOString(),
     }).eq('id', companyId)
 
-    // Queue a report for A/B/C (D gets none unless manually requested).
+    // Parked (no reachable contact): re-find contacts instead of doing further
+    // work; otherwise queue a report for A/B/C (D gets none unless requested).
     const depth = reportDepthForTier(tier)
-    if (queueReport && depth !== 'none') {
+    if (parked) {
+      await this.enqueueJob('enrich_company', { companyId, reason: 'refind_contacts' }, 3)
+    } else if (queueReport && depth !== 'none') {
       await this.enqueueJob('generate_report', { companyId, depth }, tier === 'A' ? 2 : 4)
     }
 

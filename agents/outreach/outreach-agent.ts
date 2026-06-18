@@ -12,6 +12,7 @@ import { BaseAgent, type AgentContext, type AgentResult } from '@/agents/base-ag
 import { createServiceClient } from '@/lib/supabase/server'
 import { getApprovalLevel } from '@/lib/governance/approval-rules'
 import { hiringIcebreaker } from '@/lib/enrichment/hiring-signals'
+import { pickEmailableContact, hasValidContact } from '@/lib/contacts/readiness'
 import type { Company, Contact, Grade } from '@/types'
 
 const OUTREACH_SYSTEM_PROMPT = `You are a world-class business development expert writing on behalf of Qimo Clothing, a Chinese activewear OEM/ODM manufacturer. You write as Alex from Jojofashion (jojofashion.us), the international sales arm.
@@ -242,9 +243,27 @@ export class OutreachAgent extends BaseAgent {
       .eq('company_id', input.companyId)
       .eq('status', 'uncontacted')
       .order('contact_priority', { ascending: false })
-      .limit(1)
 
-    const primaryContact = contacts?.[0] ?? null
+    // Contact gate: only auto-email a contact with a VERIFIED/deliverable email —
+    // never blast a guessed/bounced address (that's what produced the bounce).
+    const primaryContact = pickEmailableContact(contacts ?? [])
+    if (!primaryContact) {
+      const reachable = hasValidContact(contacts ?? [])
+      if (!reachable) {
+        // Truly unreachable → park in the pool + queue a contact re-find.
+        await supabase.from('companies').update({ status: 'awaiting_contact' }).eq('id', input.companyId)
+        await this.enqueueJob('enrich_company', { companyId: input.companyId, reason: 'refind_contacts' }, 3)
+      }
+      await this.logAction({
+        companyId: input.companyId,
+        actionType: 'draft_email',
+        outputData: { skipped: true, parked: !reachable, reason: reachable ? 'no_verified_email_phone_only' : 'no_reachable_contact' },
+        status: 'skipped',
+      })
+      return { success: false, error: reachable
+        ? 'Phone-only / no verified email — auto-email skipped (use manual phone/WhatsApp)'
+        : 'No reachable contact — parked awaiting contact enrichment' }
+    }
 
     // Anti-spam check
     const spamCheck = await checkAntiSpam(supabase, input.companyId, primaryContact?.id)

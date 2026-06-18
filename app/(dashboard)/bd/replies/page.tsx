@@ -16,17 +16,30 @@ export default async function BdRepliesPage() {
     .select('id, company_id, from_email, reply_subject, reply_body, reply_intent, reply_sentiment, received_at, outreach_log_id, companies(name), contacts(full_name, title)')
     .order('received_at', { ascending: false }).limit(80)
 
+  // System emails (bounce / auto-reply / unsubscribe) are NOT customer replies —
+  // keep them out of the actionable inbox (no action buttons, no raw MIME body).
+  const SYSTEM_INTENTS = new Set(['bounce', 'auto_reply', 'unsubscribe'])
+  const all = replies ?? []
+  const systemCount = all.filter((r) => SYSTEM_INTENTS.has(String(r.reply_intent))).length
+  const actionable = all.filter((r) => !SYSTEM_INTENTS.has(String(r.reply_intent)))
+
   const grouped: Record<ReplyGroup, NonNullable<typeof replies>> = {
     wants_quote: [], wants_sample: [], wants_catalog: [], wants_meeting: [], positive: [], unclear: [], not_interested: [],
   }
-  for (const r of replies ?? []) grouped[replyGroupOf(r.reply_intent, r.reply_sentiment)].push(r)
-  const total = replies?.length ?? 0
+  for (const r of actionable) grouped[replyGroupOf(r.reply_intent, r.reply_sentiment)].push(r)
+  const total = actionable.length
   const one = (v: unknown) => (Array.isArray(v) ? v[0] : v) as { name?: string; full_name?: string; title?: string } | null
 
   return (
     <div className="p-6 max-w-5xl space-y-6">
       <div className="flex items-start justify-between gap-3">
-        <div><h1 className="text-2xl font-bold">回复收件箱</h1><p className="text-sm text-muted-foreground mt-1">{total} 条回复 · 按 AI 意图分组 · 不会自动发送</p></div>
+        <div>
+          <h1 className="text-2xl font-bold">回复收件箱</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {total} 条客户回复 · 按 AI 意图分组 · 不会自动发送
+            {systemCount > 0 && <span className="ml-1">（已自动过滤 {systemCount} 封系统邮件：退信/自动回复/退订）</span>}
+          </p>
+        </div>
         <form action={reprocessReplies}>
           <button className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent shrink-0">重新识别历史回复</button>
         </form>

@@ -8,21 +8,27 @@
 export function cleanReplyBody(raw: string): string {
   let text = raw ?? ''
 
-  // If this looks like multipart MIME, extract the text/plain part.
+  // If this looks like multipart MIME, extract just the human-readable text part.
+  // (DSNs / bounces are multipart/report with nested message/rfc822 — only the
+  // first text/plain part is readable; everything else is MIME machinery.)
   const boundaryMatch = text.match(/boundary="?([^"\s;]+)"?/i)
   if (boundaryMatch && /content-type:\s*multipart/i.test(text)) {
-    const boundary = boundaryMatch[1]
-    const parts = text.split(new RegExp(`--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
+    const boundary = boundaryMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const parts = text.split(new RegExp(`--${boundary}`))
     const plain = parts.find((p) => /content-type:\s*text\/plain/i.test(p))
     const html  = parts.find((p) => /content-type:\s*text\/html/i.test(p))
-    const chosen = plain ?? html ?? ''
-    // Drop the part headers (everything up to the first blank line).
-    text = chosen.replace(/^[\s\S]*?\r?\n\r?\n/, '')
+    let chosen = plain ?? html ?? ''
+    // Drop this part's own headers (everything up to the first blank line)…
+    chosen = chosen.replace(/^[\s\S]*?\r?\n\r?\n/, '')
+    // …and cut off any nested/residual boundary that leaked in (common in DSNs).
+    chosen = chosen.split(/\r?\n--/)[0]
+    text = chosen
   }
 
   return text
     .replace(/<\/?[^>]+>/g, ' ')                       // strip HTML tags
-    .replace(/^content-(type|transfer-encoding):.*$/gim, '')
+    // strip MIME / DSN header lines
+    .replace(/^(content-(type|transfer-encoding|disposition)|mime-version|reporting-mta|received-from-mta|arrival-date|(final|original)-recipient|action|status|diagnostic-code|remote-mta|x-[\w-]+):.*$/gim, '')
     .replace(/^--[A-Za-z0-9'()+_,\-./:=?]+--?$/gm, '') // leftover MIME boundaries
     .replace(/=\r?\n/g, '')                            // quoted-printable soft breaks
     .replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))

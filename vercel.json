@@ -8,6 +8,7 @@
   "crons": [
     { "path": "/api/cron/process-queue", "schedule": "* * * * *" },
     { "path": "/api/cron/scan-replies", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/discover", "schedule": "0 1 * * *" }
+    { "path": "/api/cron/discover", "schedule": "0 1 * * *" },
+    { "path": "/api/cron/refind-contacts", "schedule": "0 */12 * * *" }
   ]
 }

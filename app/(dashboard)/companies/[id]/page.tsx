@@ -52,7 +52,7 @@ function decodeHtml(str: string): string {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  raw: '待富集', enriched: '已富集', scored: '已评分', outreach: '开发中',
+  raw: '待富集', enriched: '已富集', scored: '已评分', awaiting_contact: '待补联系方式', outreach: '开发中',
   engaged: '互动中', qualified: '有意向', closed_won: '已成交', closed_lost: '已流失', dormant: '沉睡',
 }
 
@@ -128,13 +128,21 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
   }
 
   // Build a merged, chronological conversation thread (outbound + inbound)
-  type ThreadItem = { ts: number; dir: 'out' | 'in'; subject?: string; body?: string; meta?: string }
+  type ThreadItem = { ts: number; dir: 'out' | 'in'; kind?: 'msg' | 'system'; subject?: string; body?: string; meta?: string; sysLabel?: string }
+  // Inbound system events (bounce / auto-reply / unsubscribe) are NOT customer
+  // replies — show them as a compact notice, never as a "← 客户" bubble with raw MIME.
+  const SYSTEM_REPLY: Record<string, string> = {
+    bounce: '✗ 邮件退信 — 该地址不可达（联系人已标记）',
+    auto_reply: '💤 自动回复 / 对方缺席',
+    unsubscribe: '🚫 对方要求退订',
+  }
   const thread: ThreadItem[] = []
   for (const log of outreachLogs ?? []) {
     if (log.status === 'sent' || log.direction === 'outbound') {
       thread.push({
         ts: new Date(log.sent_at ?? log.created_at).getTime(),
         dir: 'out',
+        kind: 'msg',
         subject: log.subject ?? undefined,
         body: log.body ?? undefined,
         meta: log.status,
@@ -142,12 +150,15 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
     }
   }
   for (const re of replyEvents ?? []) {
+    const sys = SYSTEM_REPLY[String(re.reply_intent ?? '')]
     thread.push({
       ts: new Date(re.received_at).getTime(),
       dir: 'in',
-      subject: re.reply_subject ?? undefined,
-      body: re.reply_body ?? undefined,
-      meta: `${re.reply_sentiment ?? ''} · ${re.reply_intent ?? ''}`,
+      kind: sys ? 'system' : 'msg',
+      subject: sys ? undefined : (re.reply_subject ?? undefined),
+      body: sys ? undefined : (re.reply_body ?? undefined),
+      sysLabel: sys,
+      meta: sys ? undefined : `${re.reply_sentiment ?? ''} · ${re.reply_intent ?? ''}`,
     })
   }
   thread.sort((a, b) => a.ts - b.ts)
@@ -279,6 +290,15 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
             <button className="text-xs px-3 py-1 border rounded-md hover:bg-accent">提交报错并重查</button>
           </form>
         </details>
+      )}
+
+      {company.status === 'awaiting_contact' && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 mb-4">
+          <p className="text-sm font-medium text-amber-800">⏸ 已入池 · 待补有效联系方式</p>
+          <p className="text-xs text-amber-700 mt-0.5">
+            该客户匹配度可以，但暂无「已验证邮箱」或「有效电话/WhatsApp」，已暂停开发并入池标注。系统会定期自动重找联系人；也可手动用下方「用 Apollo 查决策人 / 验证邮箱 / 查国内联系方式」补齐——找到有效联系方式后即可进入开发。
+          </p>
+        </div>
       )}
 
       <div className="grid grid-cols-3 gap-4">
@@ -511,27 +531,35 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               </CardHeader>
               <CardContent className="space-y-3">
                 {thread.map((item, i) => (
-                  <div key={i} className={`flex ${item.dir === 'out' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                      item.dir === 'out'
-                        ? 'bg-primary/10 border border-primary/20'
-                        : 'bg-muted border'
-                    }`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {item.dir === 'out' ? '→ 我们' : '← 客户'}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {new Date(item.ts).toLocaleDateString()}
-                        </span>
-                        {item.meta && <span className="text-[10px] text-muted-foreground">{item.meta}</span>}
-                      </div>
-                      {item.subject && <p className="font-medium text-xs mb-1">{item.subject}</p>}
-                      {item.body && (
-                        <p className="text-xs text-foreground/80 whitespace-pre-wrap line-clamp-6">{item.body}</p>
-                      )}
+                  item.kind === 'system' ? (
+                    <div key={i} className="flex justify-center">
+                      <span className="text-[11px] text-muted-foreground bg-muted/60 rounded-full px-3 py-1">
+                        {item.sysLabel} · {new Date(item.ts).toLocaleDateString()}
+                      </span>
                     </div>
-                  </div>
+                  ) : (
+                    <div key={i} className={`flex ${item.dir === 'out' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                        item.dir === 'out'
+                          ? 'bg-primary/10 border border-primary/20'
+                          : 'bg-muted border'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {item.dir === 'out' ? '→ 我们' : '← 客户'}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {new Date(item.ts).toLocaleDateString()}
+                          </span>
+                          {item.meta && <span className="text-[10px] text-muted-foreground">{item.meta}</span>}
+                        </div>
+                        {item.subject && <p className="font-medium text-xs mb-1">{item.subject}</p>}
+                        {item.body && (
+                          <p className="text-xs text-foreground/80 whitespace-pre-wrap line-clamp-6">{item.body}</p>
+                        )}
+                      </div>
+                    </div>
+                  )
                 ))}
               </CardContent>
             </Card>
