@@ -5,6 +5,13 @@ import { approveAction, rejectAction } from '@/actions/approvals'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
+// Approve-button copy by approval type (behavior unchanged — copy only).
+const APPROVE_LABELS: Record<string, string> = {
+  email_first_touch: '批准并发送',
+  quote_strategic:   '批准战略报价',
+}
+const approveLabel = (type?: string | null) => (type && APPROVE_LABELS[type]) || '批准'
+
 export default async function ApprovalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
@@ -97,7 +104,7 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
           <form action={approveAction}>
             <input type="hidden" name="approvalId" value={approval.id} />
             <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white">
-              批准并执行
+              {approveLabel(approval.approval_type as string | null)}
             </Button>
           </form>
           <form action={rejectAction}>

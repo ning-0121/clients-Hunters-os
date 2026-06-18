@@ -12,7 +12,8 @@
     "worker:prod": "npx tsx workers/run.ts",
     "verify": "npx tsx --env-file=.env.local scripts/verify-loop.ts",
     "test:tiering": "npx tsx scripts/test-tiering-reports.ts",
-    "validate": "npx tsx --env-file=.env.local scripts/validate-sprint.ts"
+    "validate": "npx tsx --env-file=.env.local scripts/validate-sprint.ts",
+    "validate:quote": "npx tsx --env-file=.env.local scripts/validate-quote.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

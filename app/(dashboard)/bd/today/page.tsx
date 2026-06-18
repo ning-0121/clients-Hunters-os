@@ -277,6 +277,7 @@ export default async function BdTodayPage() {
               {/* 6. 操作 */}
               <div className="flex gap-1.5 flex-wrap pt-1">
                 <Link href={`/companies/${c.id}/report`} className="text-xs px-2 py-1 border rounded-md">看报告</Link>
+                <Link href={`/companies/${c.id}#quote-strategy`} className="text-xs px-2 py-1 border rounded-md">报价策略</Link>
                 <Link href={`/companies/${c.id}/outreach`} className="text-xs px-2 py-1 border rounded-md">生成开发信</Link>
                 {c.assigned_to !== who && <form action={assignLeadToMe}><input type="hidden" name="companyId" value={c.id} /><button className="text-xs px-2 py-1 border rounded-md">分配给我</button></form>}
                 {c.data_flag

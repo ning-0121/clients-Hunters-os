@@ -24,6 +24,7 @@ import {
 import { recommendFactoryForCompany } from '@/lib/factory/recommend'
 import { FACTORY_DECISION_LABELS } from '@/lib/factory/matcher'
 import { assessCredit, parseShipments } from '@/lib/credit/assess'
+import { QuoteStrategyCard } from '@/components/quote/quote-strategy-card'
 
 const TIER_STYLES: Record<string, string> = {
   A: 'bg-purple-100 text-purple-800 border-purple-200',
@@ -878,6 +879,11 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               <p className="text-[10px] text-muted-foreground/70">基于公开信号的参考评估，非征信背书；大单建议人工核实 / 中信保。</p>
             </CardContent>
           </Card>
+
+          {/* 报价策略（Quote Intelligence Engine — 决策建议，不自动报价） */}
+          <div id="quote-strategy" className="scroll-mt-4">
+            <QuoteStrategyCard companyId={id} />
+          </div>
         </div>
       </div>
     </div>

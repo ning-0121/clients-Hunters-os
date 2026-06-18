@@ -13,6 +13,7 @@ const RISK_LABELS: Record<string, string> = {
 const LEVEL_STYLES: Record<string, string> = {
   L2: 'bg-yellow-100 text-yellow-800',
   L3: 'bg-red-100 text-red-800',
+  owner: 'bg-purple-100 text-purple-800',
 }
 
 const RISK_STYLES: Record<string, string> = {
@@ -21,6 +22,13 @@ const RISK_STYLES: Record<string, string> = {
   high:     'bg-orange-100 text-orange-800',
   critical: 'bg-red-100 text-red-800',
 }
+
+// Approve-button copy by approval type (behavior is unchanged — copy only).
+const APPROVE_LABELS: Record<string, string> = {
+  email_first_touch: '✓ 批准并发送',
+  quote_strategic:   '✓ 批准战略报价',
+}
+const approveLabel = (type?: string | null) => (type && APPROVE_LABELS[type]) || '✓ 批准'
 
 export default async function ApprovalsPage() {
   const supabase = await createClient()
@@ -108,7 +116,7 @@ export default async function ApprovalsPage() {
                     <form action={approveAction} className="flex-1 sm:flex-none">
                       <input type="hidden" name="approvalId" value={item.id} />
                       <button type="submit" className="w-full sm:w-auto px-5 py-3 sm:py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 active:bg-green-800 transition-colors font-medium">
-                        ✓ 批准并发送
+                        {approveLabel(item.approval_type)}
                       </button>
                     </form>
                     <form action={rejectAction} className="flex-1 sm:flex-none">
