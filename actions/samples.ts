@@ -3,6 +3,7 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { enqueueHandoff } from '@/lib/metronome/client'
 import { buildSamplePayload } from '@/lib/metronome/payloads'
+import { logEvent } from '@/lib/events/log'
 import { revalidatePath } from 'next/cache'
 
 /**
@@ -29,6 +30,7 @@ export async function createSample(formData: FormData): Promise<void> {
     shipping_country: (formData.get('shippingCountry') as string) || null,
     shipping_phone:   (formData.get('shippingPhone') as string) || null,
     status:           'requested',
+    deal_id:          (formData.get('dealId') as string) || null,
   }).select('id').single()
 
   // Move company into the sampling stage
@@ -48,6 +50,13 @@ export async function createSample(formData: FormData): Promise<void> {
     source:     'system',
     due_at:     new Date().toISOString(),
   }).select('id')
+
+  await logEvent({
+    companyId, dealId: (formData.get('dealId') as string) || null,
+    eventType: 'sample', direction: 'out',
+    title: `寄样请求${styles.length ? '：' + styles.join('、') : ''}`,
+    refTable: 'samples', refId: sample?.id ?? null,
+  })
 
   revalidatePath(`/companies/${companyId}`)
   revalidatePath('/samples')

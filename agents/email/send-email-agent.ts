@@ -8,6 +8,7 @@ import { sendGmail, isGmailConfigured } from '@/lib/email/gmail'
 import { checkSendThrottle, recordSend } from '@/lib/email/throttle'
 import { checkBounceHealth } from '@/lib/email/bounce-rate'
 import { resolveSendableEmail } from '@/lib/email/resolve'
+import { logEvent } from '@/lib/events/log'
 
 interface SendEmailInput {
   outreachLogId: string
@@ -146,6 +147,14 @@ export class SendEmailAgent extends BaseAgent {
         gmail_message_id: sendResult.messageId ?? null,
       })
       .eq('id', outreachLogId)
+
+    await logEvent({
+      companyId: log.company_id as string,
+      contactId: (log.contact_id as string) ?? null,
+      eventType: 'email_out', direction: 'out', channel: 'email',
+      title: `发送邮件：${subject}`.slice(0, 140),
+      refTable: 'outreach_logs', refId: outreachLogId,
+    })
 
     // 4. Record in send log (for throttle tracking) — skip simulated sends
     if (sendResult.method !== 'simulated') {

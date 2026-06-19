@@ -3,6 +3,7 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { enqueueHandoff } from '@/lib/metronome/client'
 import { buildOrderPayload } from '@/lib/metronome/payloads'
+import { logEvent } from '@/lib/events/log'
 import { revalidatePath } from 'next/cache'
 
 /** Create a draft order from a company (typically after sample approval). */
@@ -34,6 +35,14 @@ export async function createOrder(formData: FormData): Promise<void> {
     shipping_method:   (formData.get('shippingMethod') as string) || null,
     brand_requirements:(formData.get('brandRequirements') as string) || null,
     status:            'draft',
+    deal_id:           (formData.get('dealId') as string) || null,
+  })
+
+  await logEvent({
+    companyId, dealId: (formData.get('dealId') as string) || null,
+    eventType: 'po', direction: 'in',
+    title: `创建订单${formData.get('orderRef') ? ' ' + formData.get('orderRef') : ''}${formData.get('orderValue') ? ' · $' + formData.get('orderValue') : ''}`,
+    refTable: 'orders',
   })
 
   revalidatePath(`/companies/${companyId}`)

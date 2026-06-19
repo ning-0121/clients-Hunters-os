@@ -25,6 +25,9 @@ import { recommendFactoryForCompany } from '@/lib/factory/recommend'
 import { FACTORY_DECISION_LABELS } from '@/lib/factory/matcher'
 import { assessCredit, parseShipments } from '@/lib/credit/assess'
 import { QuoteStrategyCard } from '@/components/quote/quote-strategy-card'
+import { DealList, type DealRow } from '@/components/conversion/deal-list'
+import { TimelineFeed, type EventRow } from '@/components/conversion/timeline-feed'
+import { createDeal } from '@/actions/deals'
 
 const TIER_STYLES: Record<string, string> = {
   A: 'bg-purple-100 text-purple-800 border-purple-200',
@@ -89,6 +92,8 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
     { data: orders },
     { data: latestReport },
     { count: pendingJobs },
+    { data: dealRows },
+    { data: timelineEvents },
   ] = await Promise.all([
     supabase.from('companies').select('*').eq('id', id).single(),
     supabase.from('contacts').select('*').eq('company_id', id).order('contact_priority', { ascending: false }),
@@ -101,6 +106,10 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
       .eq('company_id', id).order('report_version', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('agent_queue').select('*', { count: 'exact', head: true })
       .filter('payload->>companyId', 'eq', id).in('status', ['waiting', 'active']),
+    supabase.from('deals').select('id, title, stage, status, owner, next_action, next_action_due_at, stage_entered_at, est_value_usd, win_prob')
+      .eq('company_id', id).order('created_at', { ascending: false }),
+    supabase.from('customer_events').select('id, deal_id, event_type, direction, occurred_at, title, body, owner, source')
+      .eq('company_id', id).order('occurred_at', { ascending: false }).limit(60),
   ])
 
   if (!company) notFound()
@@ -127,41 +136,15 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
     偏高: 'bg-red-100 text-red-700', 数据不足: 'bg-gray-100 text-gray-500',
   }
 
-  // Build a merged, chronological conversation thread (outbound + inbound)
-  type ThreadItem = { ts: number; dir: 'out' | 'in'; kind?: 'msg' | 'system'; subject?: string; body?: string; meta?: string; sysLabel?: string }
-  // Inbound system events (bounce / auto-reply / unsubscribe) are NOT customer
-  // replies — show them as a compact notice, never as a "← 客户" bubble with raw MIME.
-  const SYSTEM_REPLY: Record<string, string> = {
-    bounce: '✗ 邮件退信 — 该地址不可达（联系人已标记）',
-    auto_reply: '💤 自动回复 / 对方缺席',
-    unsubscribe: '🚫 对方要求退订',
-  }
-  const thread: ThreadItem[] = []
-  for (const log of outreachLogs ?? []) {
-    if (log.status === 'sent' || log.direction === 'outbound') {
-      thread.push({
-        ts: new Date(log.sent_at ?? log.created_at).getTime(),
-        dir: 'out',
-        kind: 'msg',
-        subject: log.subject ?? undefined,
-        body: log.body ?? undefined,
-        meta: log.status,
-      })
-    }
-  }
-  for (const re of replyEvents ?? []) {
-    const sys = SYSTEM_REPLY[String(re.reply_intent ?? '')]
-    thread.push({
-      ts: new Date(re.received_at).getTime(),
-      dir: 'in',
-      kind: sys ? 'system' : 'msg',
-      subject: sys ? undefined : (re.reply_subject ?? undefined),
-      body: sys ? undefined : (re.reply_body ?? undefined),
-      sysLabel: sys,
-      meta: sys ? undefined : `${re.reply_sentiment ?? ''} · ${re.reply_intent ?? ''}`,
-    })
-  }
-  thread.sort((a, b) => a.ts - b.ts)
+  // Conversion OS — deals + unified timeline (customer_events) derived values.
+  const deals = (dealRows ?? []) as DealRow[]
+  const openDeals = deals.filter((d) => d.status === 'open')
+  const timeline = (timelineEvents ?? []) as EventRow[]
+  const urgentDeal = openDeals
+    .filter((d) => d.next_action_due_at)
+    .sort((a, b) => new Date(a.next_action_due_at!).getTime() - new Date(b.next_action_due_at!).getTime())[0]
+  const ACCOUNT_LABEL: Record<string, string> = { prospect: '潜在客户', active_customer: '活跃客户', key_account: '关键客户', strategic_account: '战略客户' }
+  const BAND_LABEL: Record<string, string> = { cold: '❄️ Cold', warm: '🌤️ Warm', hot: '🔥 Hot', champion: '🏆 Champion', dormant: '💤 Dormant', risk: '⚠️ Risk' }
 
   const firstContact = contacts?.[0]
   const canSample = ['outreach', 'engaged', 'qualified'].includes(company.status)
@@ -300,6 +283,36 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           </p>
         </div>
       )}
+
+      {/* 成交推进 — 30 秒条 + 机会列表 */}
+      <div className="border rounded-lg p-4 mb-4 space-y-3">
+        <div className="flex items-center gap-3 flex-wrap text-sm">
+          <span className="font-semibold">成交推进</span>
+          {company.relationship_band ? <span className="px-2 py-0.5 rounded-full bg-accent text-xs">{BAND_LABEL[company.relationship_band as string] ?? String(company.relationship_band)}</span> : null}
+          <span className="px-2 py-0.5 rounded-full border text-xs">{ACCOUNT_LABEL[(company.account_status as string) ?? 'prospect'] ?? '潜在客户'}</span>
+          <span className="text-xs text-muted-foreground">进行中机会 {openDeals.length}</span>
+          {company.assigned_to ? <span className="text-xs text-muted-foreground">负责人 {company.assigned_to as string}</span> : null}
+          {urgentDeal?.next_action && <span className="text-xs ml-auto">最紧下一步：{urgentDeal.next_action} · {new Date(urgentDeal.next_action_due_at!).toLocaleDateString()}</span>}
+        </div>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-muted-foreground">机会 Deals</h3>
+          <details className="relative">
+            <summary className="text-xs text-primary cursor-pointer list-none">＋ 新建机会</summary>
+            <form action={createDeal} className="absolute right-0 z-10 mt-1 w-72 border rounded-md bg-card p-3 space-y-2 shadow-lg">
+              <input type="hidden" name="companyId" value={id} />
+              <input name="title" required placeholder="机会标题，如 Leggings 5000pcs" className="w-full px-2 py-1 text-sm border rounded-md bg-background" />
+              <div className="grid grid-cols-2 gap-2">
+                <input name="product_category" placeholder="品类" className="px-2 py-1 text-xs border rounded-md bg-background" />
+                <input name="qty" type="number" placeholder="数量" className="px-2 py-1 text-xs border rounded-md bg-background" />
+                <input name="est_value_usd" type="number" placeholder="预估额 USD" className="px-2 py-1 text-xs border rounded-md bg-background" />
+                <input name="expected_close_date" type="date" className="px-2 py-1 text-xs border rounded-md bg-background" />
+              </div>
+              <button className="w-full text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md">创建机会</button>
+            </form>
+          </details>
+        </div>
+        <DealList deals={deals} />
+      </div>
 
       <div className="grid grid-cols-3 gap-4">
         {/* Left column: Company Info */}
@@ -523,47 +536,20 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
             </Card>
           )}
 
-          {/* Conversation Thread */}
-          {thread.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">沟通记录</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {thread.map((item, i) => (
-                  item.kind === 'system' ? (
-                    <div key={i} className="flex justify-center">
-                      <span className="text-[11px] text-muted-foreground bg-muted/60 rounded-full px-3 py-1">
-                        {item.sysLabel} · {new Date(item.ts).toLocaleDateString()}
-                      </span>
-                    </div>
-                  ) : (
-                    <div key={i} className={`flex ${item.dir === 'out' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                        item.dir === 'out'
-                          ? 'bg-primary/10 border border-primary/20'
-                          : 'bg-muted border'
-                      }`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            {item.dir === 'out' ? '→ 我们' : '← 客户'}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {new Date(item.ts).toLocaleDateString()}
-                          </span>
-                          {item.meta && <span className="text-[10px] text-muted-foreground">{item.meta}</span>}
-                        </div>
-                        {item.subject && <p className="font-medium text-xs mb-1">{item.subject}</p>}
-                        {item.body && (
-                          <p className="text-xs text-foreground/80 whitespace-pre-wrap line-clamp-6">{item.body}</p>
-                        )}
-                      </div>
-                    </div>
-                  )
-                ))}
-              </CardContent>
-            </Card>
-          )}
+          {/* 统一时间线（所有渠道：邮件/回复/样品/报价/订单/阶段 + 人工记录的电话/WhatsApp/会议/拜访…）*/}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">时间线</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TimelineFeed
+                events={timeline}
+                companyId={id}
+                deals={deals.map((d) => ({ id: d.id, title: d.title }))}
+                contacts={(contacts ?? []).map((c) => ({ id: c.id as string, full_name: (c.full_name as string) ?? null }))}
+              />
+            </CardContent>
+          </Card>
 
           {/* Samples */}
           {samples && samples.length > 0 && (

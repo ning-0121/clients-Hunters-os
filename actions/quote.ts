@@ -9,6 +9,7 @@ import { getPricingBaseline, type QuoteCategory, type FabricComplexity, QUOTE_CA
 import { computeQuoteStrategy, type QuoteEngineInput, type QuoteStrategy, type CompetitionLevel, type CompetitionMeta } from '@/lib/quote/engine'
 import { inferCompetition } from '@/lib/quote/competition'
 import { composeQuoteMessage } from '@/lib/quote/message'
+import { logEvent } from '@/lib/events/log'
 
 const LATAM = ['Mexico', 'Colombia', 'Brazil', 'Argentina', 'Peru', 'Chile', 'Venezuela']
 
@@ -246,6 +247,14 @@ export async function triggerQuoteStrategy(formData: FormData): Promise<void> {
     cac: null, // RESERVED — not computed in P0
     approval_id: approvalId,
     created_by: identity.who,
+    deal_id: String(formData.get('dealId') ?? '') || null,
+  })
+
+  await logEvent({
+    companyId, dealId: String(formData.get('dealId') ?? '') || null,
+    eventType: 'quote', direction: 'internal',
+    title: `报价策略快照：${strategy.category} × ${strategy.qty}，推荐 ${(strategy.margins.recommended * 100).toFixed(0)}%`,
+    owner: identity.who, refTable: 'quote_strategies',
   })
 
   revalidatePath(`/companies/${companyId}`)

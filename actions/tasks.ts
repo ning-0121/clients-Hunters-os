@@ -2,6 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { callLLMSimple } from '@/lib/llm/client'
+import { logEvent } from '@/lib/events/log'
 import { revalidatePath } from 'next/cache'
 
 /** Mark a task done. */
@@ -9,12 +10,19 @@ export async function completeTask(formData: FormData): Promise<void> {
   const taskId = formData.get('taskId') as string
   if (!taskId) return
   const sb = await createServiceClient()
+  const { data: task } = await sb.from('tasks').select('company_id, title').eq('id', taskId).maybeSingle()
   await sb.from('tasks').update({
     status:       'done',
     completed_at: new Date().toISOString(),
     completed_by: (formData.get('by') as string) ?? 'human',
     updated_at:   new Date().toISOString(),
   }).eq('id', taskId)
+  if (task?.company_id) {
+    await logEvent({
+      companyId: task.company_id as string, eventType: 'task', direction: 'internal',
+      title: `完成任务：${task.title ?? ''}`.slice(0, 140), source: 'system',
+    })
+  }
   revalidatePath('/tasks')
 }
 

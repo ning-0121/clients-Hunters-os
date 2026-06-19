@@ -20,6 +20,7 @@
 import { ImapFlow, type ImapFlowOptions } from 'imapflow'
 import { createDirectClient } from '@/lib/supabase/server'
 import { notify } from '@/lib/notify/notifier'
+import { logEvent } from '@/lib/events/log'
 import {
   cleanReplyBody, isBounce as isBounceShared, classifySentiment as classifySentimentShared,
   classifyReplyIntent, NON_ACTIONABLE_INTENTS,
@@ -294,6 +295,14 @@ async function processReplies(emails: ParsedEmail[]): Promise<number> {
       received_at:      email.date.toISOString(),
     }).select('id').single()
     const replyEventId = replyInsert.data?.id ?? null
+
+    await logEvent({
+      companyId: matchedLog.company_id, contactId: matchedLog.contact_id ?? null,
+      eventType: 'email_in', direction: 'in', channel: 'email',
+      title: `收到回复：${email.subject ?? ''}`.slice(0, 140),
+      refTable: 'reply_events', refId: replyEventId,
+      metadata: { sentiment, intent },
+    })
 
     // 3. Update outreach_log
     await sb.from('outreach_logs').update({
