@@ -10,6 +10,7 @@ import { detectHiringSignals }  from '@/lib/enrichment/hiring-signals'
 import { detectTriggers }       from '@/lib/enrichment/trigger-detector'
 import { discoverPeople }       from '@/lib/enrichment/contact-discovery'
 import { toPersonCandidate, type PersonCandidate } from '@/lib/enrichment/contact-types'
+import { stampHunt } from '@/lib/contacts/hunt-cadence'
 
 const ENRICH_SYSTEM_PROMPT = `You are an expert at identifying business decision-makers for activewear brands.
 Given company info, website text, tech stack, and hiring data — identify the most likely contacts.
@@ -109,6 +110,8 @@ export class EnrichAgent extends BaseAgent {
       status:          'enriched',
       enriched_at:     new Date().toISOString(),
       updated_at:      new Date().toISOString(),
+      // Stamp the hunt time so the cooldown gate can throttle re-enrichment.
+      source_raw:      stampHunt(company.source_raw, new Date().toISOString()),
     }
 
     // Only update techstack cols if they exist in schema (graceful fallback)

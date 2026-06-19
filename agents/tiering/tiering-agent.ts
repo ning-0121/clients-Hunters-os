@@ -17,6 +17,7 @@ import { matchFactory } from '@/lib/factory/matcher'
 import { loadFactoryPool } from '@/lib/factory/recommend'
 import { extractJson } from '@/lib/llm/json'
 import { hasValidContact } from '@/lib/contacts/readiness'
+import { companyHuntDue } from '@/lib/contacts/hunt-cadence'
 
 // Valid target_customer_segment enum values (the column is an enum, NOT free prose).
 const SEGMENT_ENUM = new Set([
@@ -190,7 +191,10 @@ export class TieringAgent extends BaseAgent {
     // work; otherwise queue a report for A/B/C (D gets none unless requested).
     const depth = reportDepthForTier(tier)
     if (parked) {
-      await this.enqueueJob('enrich_company', { companyId, reason: 'refind_contacts' }, 3)
+      // Cooldown gate: re-find on a schedule, not in a tight enrich→score→tier loop.
+      if (companyHuntDue({ tier, sourceRaw: company.source_raw, nowMs: Date.now() })) {
+        await this.enqueueJob('enrich_company', { companyId, reason: 'refind_contacts' }, 3)
+      }
     } else if (queueReport && depth !== 'none') {
       await this.enqueueJob('generate_report', { companyId, depth }, tier === 'A' ? 2 : 4)
     }

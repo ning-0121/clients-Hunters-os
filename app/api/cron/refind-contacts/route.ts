@@ -12,6 +12,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server'
 import { createDirectClient } from '@/lib/supabase/server'
+import { companyHuntDue } from '@/lib/contacts/hunt-cadence'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
   // Oldest-touched parked companies first.
   const { data: parked } = await sb
     .from('companies')
-    .select('id, source_raw')
+    .select('id, source_raw, customer_tier')
     .eq('status', 'awaiting_contact')
     .order('updated_at', { ascending: true })
     .limit(BATCH)
@@ -60,11 +61,22 @@ export async function GET(req: NextRequest) {
   )
   const toProcess = rows.filter((r) => !pendingIds.has(r.id as string))
 
-  const nowIso = new Date().toISOString()
+  const nowMs = Date.now()
+  const nowIso = new Date(nowMs).toISOString()
   let queued = 0
+  let skipped = 0
   for (const r of toProcess) {
     const companyId = r.id as string
     const raw = (r.source_raw as Record<string, unknown>) ?? {}
+
+    // Cooldown gate: high-value (A/B) re-hunts every 12h, others every 72h — never
+    // a tight loop. Not-due companies just rotate to the back (no API call).
+    if (!companyHuntDue({ tier: r.customer_tier as string | null, sourceRaw: raw, nowMs })) {
+      await sb.from('companies').update({ updated_at: nowIso }).eq('id', companyId)
+      skipped++
+      continue
+    }
+
     const hunt = (raw.hunt as { attempts?: number } | undefined) ?? {}
     const attempts = typeof hunt.attempts === 'number' ? hunt.attempts : 0
     const roleTarget = huntPhase(attempts)
@@ -86,5 +98,5 @@ export async function GET(req: NextRequest) {
     queued++
   }
 
-  return NextResponse.json({ ok: true, parked: rows.length, queued })
+  return NextResponse.json({ ok: true, parked: rows.length, queued, skipped })
 }

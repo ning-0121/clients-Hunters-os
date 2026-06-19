@@ -13,6 +13,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { getApprovalLevel } from '@/lib/governance/approval-rules'
 import { hiringIcebreaker } from '@/lib/enrichment/hiring-signals'
 import { pickEmailableContact, hasValidContact } from '@/lib/contacts/readiness'
+import { companyHuntDue } from '@/lib/contacts/hunt-cadence'
 import type { Company, Contact, Grade } from '@/types'
 
 const OUTREACH_SYSTEM_PROMPT = `You are a world-class business development expert writing on behalf of Qimo Clothing, a Chinese activewear OEM/ODM manufacturer. You write as Alex from Jojofashion (jojofashion.us), the international sales arm.
@@ -250,9 +251,11 @@ export class OutreachAgent extends BaseAgent {
     if (!primaryContact) {
       const reachable = hasValidContact(contacts ?? [])
       if (!reachable) {
-        // Truly unreachable → park in the pool + queue a contact re-find.
+        // Truly unreachable → park in the pool + queue a contact re-find (cooldown-gated).
         await supabase.from('companies').update({ status: 'awaiting_contact' }).eq('id', input.companyId)
-        await this.enqueueJob('enrich_company', { companyId: input.companyId, reason: 'refind_contacts' }, 3)
+        if (companyHuntDue({ tier: (company?.customer_tier as string | null) ?? null, sourceRaw: company?.source_raw, nowMs: Date.now() })) {
+          await this.enqueueJob('enrich_company', { companyId: input.companyId, reason: 'refind_contacts' }, 3)
+        }
       }
       await this.logAction({
         companyId: input.companyId,

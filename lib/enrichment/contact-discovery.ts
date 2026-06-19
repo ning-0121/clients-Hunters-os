@@ -17,6 +17,7 @@ import { rocketreachFindContacts } from '@/lib/enrichment/rocketreach'
 import { xrayFindContacts } from '@/lib/enrichment/xray'
 import { githubFindContacts } from '@/lib/enrichment/github'
 import { findEmails, smtpVerify, type EmailCandidate } from '@/lib/enrichment/email-finder'
+import { resolveMailDomain } from '@/lib/enrichment/mail-domain'
 import { classifyRole, roleRank, type ContactRole } from '@/lib/contacts/roles'
 import { toPersonCandidate, type PersonCandidate, type ContactSource } from '@/lib/enrichment/contact-types'
 
@@ -79,9 +80,13 @@ export async function discoverPeople(params: {
   extraCandidates?: PersonCandidate[]
   limit?: number
 }): Promise<DiscoveredContact[]> {
-  const { domain, companyName, existingEmails = [], roleTarget, extraCandidates = [] } = params
+  const { domain, companyName, website, existingEmails = [], roleTarget, extraCandidates = [] } = params
   const limit = params.limit ?? 6
   const titles = roleTarget?.length ? roleTarget : undefined
+  // Email guessing/verification must target the corporate mail domain, not a
+  // storefront/locale host (us.oneractive.com → oneractive.com). Apollo org search
+  // and website scraping keep using the original `domain`/`website`.
+  const mailDomain = (await resolveMailDomain({ domain, website, knownEmails: existingEmails })) ?? domain
 
   // 1. Run all API sources in parallel (each no-ops without its key).
   const [apolloRaw, rr, xray, gh] = await Promise.all([
@@ -119,9 +124,9 @@ export async function discoverPeople(params: {
   // 4a. Resolve emails for candidates with no source email (Hunter + SMTP).
   const needEmail = ranked.filter((r) => !r.c.email && r.c.firstName && r.c.lastName)
   let resolved: EmailCandidate[] = []
-  if (domain && needEmail.length) {
+  if (mailDomain && needEmail.length) {
     const fe = await findEmails({
-      domain,
+      domain: mailDomain,
       existingEmails,
       candidates: needEmail.map((r) => ({ firstName: r.c.firstName, lastName: r.c.lastName, title: r.c.title })),
       skipSmtp: false,
