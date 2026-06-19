@@ -103,6 +103,12 @@ export default async function CompaniesPage({
             </button>
           </form>
           <Link
+            href="/companies/new"
+            className="text-sm px-4 py-2 border rounded-md hover:bg-accent transition-colors"
+          >
+            + 新建客户
+          </Link>
+          <Link
             href="/leads/discovery"
             className="bg-primary text-primary-foreground text-sm px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
           >

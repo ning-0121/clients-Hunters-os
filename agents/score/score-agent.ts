@@ -166,6 +166,11 @@ export class ScoreAgent extends BaseAgent {
       durationMs: Date.now() - startTime,
     })
 
+    // Auto-advance the pipeline: every freshly-scored company gets tiered/graded
+    // automatically (applies to all companies, not just manually-created ones),
+    // so a new lead is fully usable without a manual 「客户分级」 click.
+    await this.enqueueJob('tier_company', { companyId }, 3)
+
     return { success: true, data: { total, grade, scores, techStackScore, hiringScore } }
   }
 

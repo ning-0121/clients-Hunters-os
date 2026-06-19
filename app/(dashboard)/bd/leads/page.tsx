@@ -83,7 +83,10 @@ export default async function BdLeadsPage({ searchParams }: { searchParams: Prom
     <div className="p-6 max-w-7xl">
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-2xl font-bold">客户池</h1><p className="text-sm text-muted-foreground mt-1">{companies.length} 个客户</p></div>
-        <Link href="/leads/discovery" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md">+ Discovery</Link>
+        <div className="flex gap-2">
+          <Link href="/companies/new" className="text-sm px-4 py-2 border rounded-md hover:bg-accent">+ 新建客户</Link>
+          <Link href="/leads/discovery" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md">+ Discovery</Link>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
