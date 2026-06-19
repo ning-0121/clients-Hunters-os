@@ -11,9 +11,11 @@
  *   - Champion       an internal advocate (engaged / linked on a deal)
  *   - Influencer     other known roles
  *
- * North Star per account = a VERIFIED Champion OR VERIFIED Decision Maker.
+ * "Reachable" = a Verified OR Trusted email (people-database sources count even
+ * when a catch-all domain blocks SMTP). North Star per account =
+ * a REACHABLE Champion OR Decision-Maker.
  */
-import { computeCredibility, credibilityRank, type CredibilityInput, type CredibilityTier } from '@/lib/contacts/credibility'
+import { computeCredibility, credibilityRank, isReachableTier, type CredibilityInput, type CredibilityTier } from '@/lib/contacts/credibility'
 
 export interface AccessContact extends CredibilityInput {
   id?: string
@@ -23,7 +25,7 @@ export interface AccessContact extends CredibilityInput {
   is_champion?: boolean | null
 }
 
-export type CoverageState = 'verified' | 'likely' | 'guessed' | 'missing'
+export type CoverageState = 'verified' | 'trusted' | 'probable' | 'guessed' | 'missing'
 
 export interface Coverage {
   champion: CoverageState
@@ -37,21 +39,27 @@ export interface AccessResult {
   score: number
   coverage: Coverage
   totalContacts: number
-  verifiedContacts: number
-  /** Human labels of buying roles still missing a verified contact — "find next". */
+  /** Contacts that are reachable (Verified OR Trusted). */
+  reachableContacts: number
+  /** Human labels of buying roles still missing a reachable contact — "find next". */
   missingRoles: string[]
-  /** The North Star boolean: do we have a verified champion or decision-maker? */
-  hasVerifiedChampionOrDM: boolean
+  /** The North Star boolean: a reachable (verified/trusted) champion or decision-maker. */
+  hasReachableChampionOrDM: boolean
   label: string
 }
 
 const BUYER_ROLES = new Set(['sourcing', 'product', 'production'])
 const ENGAGED_STATUS = new Set(['replied', 'engaged', 'meeting', 'customer', 'active'])
 
-const tierToState = (t: CredibilityTier): CoverageState => (t === 'none' ? 'missing' : t)
+/** A coverage state that counts as reachable for the North Star. */
+export const isReachableState = (s: CoverageState): boolean => s === 'verified' || s === 'trusted'
 
 function isChampion(c: AccessContact, championIds: Set<string>): boolean {
   return c.is_champion === true || (!!c.id && championIds.has(c.id)) || ENGAGED_STATUS.has((c.status ?? '').toLowerCase())
+}
+
+function rankToState(rank: number): CoverageState {
+  return rank >= 4 ? 'verified' : rank === 3 ? 'trusted' : rank === 2 ? 'probable' : rank === 1 ? 'guessed' : 'missing'
 }
 
 /** Best credibility state among contacts in a bucket ('missing' if the bucket is empty). */
@@ -61,8 +69,7 @@ function bestState(contacts: AccessContact[], inBucket: (c: AccessContact) => bo
     if (!inBucket(c)) continue
     best = Math.max(best, credibilityRank(computeCredibility(c).tier))
   }
-  if (best <= 0) return 'missing'   // empty bucket (-1) or only no-email contacts (0)
-  return best === 3 ? 'verified' : best === 2 ? 'likely' : 'guessed'
+  return rankToState(best)
 }
 
 export function computeAccess(contacts: AccessContact[], opts?: { championContactIds?: string[] }): AccessResult {
@@ -74,38 +81,38 @@ export function computeAccess(contacts: AccessContact[], opts?: { championContac
   const buyer = bestState(list, (c) => BUYER_ROLES.has((c.role_type ?? '').toLowerCase()))
   const influencer = bestState(list, (c) => (c.decision_level ?? '') === 'influencer')
 
-  const tiers = list.map((c) => computeCredibility(c).tier)
-  const verifiedContacts = tiers.filter((t) => t === 'verified').length
+  const tiers: CredibilityTier[] = list.map((c) => computeCredibility(c).tier)
+  const reachableContacts = tiers.filter(isReachableTier).length
   const anyEmail = list.some((c) => !!(c.email && c.email.trim()))
   const anyContact = list.length > 0
 
-  const verifiedChampion = champion === 'verified'
-  const verifiedDM = decisionMaker === 'verified'
-  const verifiedBuyer = buyer === 'verified'
-  const anyVerified = verifiedContacts > 0
+  const reachableChampion = isReachableState(champion)
+  const reachableDM = isReachableState(decisionMaker)
+  const reachableBuyer = isReachableState(buyer)
+  const anyReachable = reachableContacts > 0
 
-  // Score ladder (monotonic). Mirrors the spec; a verified DM reaches 80 to match
-  // the North Star ("verified Champion OR Decision Maker").
+  // Score ladder (monotonic). "Reachable" = Verified OR Trusted, so catch-all
+  // domains no longer permanently suppress access quality.
   let score = 0
-  if (anyContact) score = 10                 // we know who exists, but no usable email yet
-  if (anyEmail) score = 20                    // at least a guessed/unverified email
-  if (anyVerified) score = 40                 // a verified contact (any role)
-  if (verifiedBuyer) score = 60               // verified buyer (sourcing/product/production)
-  if (verifiedChampion || verifiedDM) score = 80
-  if (verifiedChampion && verifiedDM) score = 100
+  if (anyContact) score = 10                  // we know who exists, but no usable email yet
+  if (anyEmail) score = 20                     // at least a guessed/probable email
+  if (anyReachable) score = 40                 // a reachable contact (any role)
+  if (reachableBuyer) score = 60               // reachable buyer (sourcing/product/production)
+  if (reachableChampion || reachableDM) score = 80
+  if (reachableChampion && reachableDM) score = 100
 
   const missingRoles: string[] = []
-  if (decisionMaker !== 'verified') missingRoles.push('Decision Maker')
-  if (buyer !== 'verified') missingRoles.push('Buyer (Sourcing/Production)')
-  if (champion !== 'verified') missingRoles.push('Champion')
+  if (!reachableDM) missingRoles.push('Decision Maker')
+  if (!reachableBuyer) missingRoles.push('Buyer (Sourcing/Production)')
+  if (!reachableChampion) missingRoles.push('Champion')
 
-  const hasVerifiedChampionOrDM = verifiedChampion || verifiedDM
+  const hasReachableChampionOrDM = reachableChampion || reachableDM
 
   const label =
     score >= 100 ? '完全可达(Champion+决策人)' :
-    score >= 80 ? '可达(已验证决策人/Champion)' :
-    score >= 60 ? '可达买手(已验证)' :
-    score >= 40 ? '有已验证联系人' :
+    score >= 80 ? '可达(决策人/Champion · 验证或可信)' :
+    score >= 60 ? '可达买手' :
+    score >= 40 ? '有可达联系人' :
     score >= 20 ? '仅推测邮箱' :
     score >= 10 ? '知人未可达' : '无联系人'
 
@@ -113,9 +120,9 @@ export function computeAccess(contacts: AccessContact[], opts?: { championContac
     score,
     coverage: { champion, decisionMaker, buyer, influencer },
     totalContacts: list.length,
-    verifiedContacts,
+    reachableContacts,
     missingRoles,
-    hasVerifiedChampionOrDM,
+    hasReachableChampionOrDM,
     label,
   }
 }

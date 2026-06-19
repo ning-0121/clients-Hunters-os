@@ -1,14 +1,23 @@
 /**
- * Email credibility — the single source of truth for "should I send to this?"
- * Derived from the verification signals we already store on a contact
- * (email_verified / email_deliverable / email_confidence / email_source).
+ * Email credibility — how much we trust a contact's email, as a tiered model.
  *
- *   Verified  🟢 — confirmed deliverable (Hunter) / Apollo-verified / official-site + reachable → send
- *   Likely    🟡 — credible source but not fully verified (catch-all/risky/Apollo/Hunter/SMTP) → send with care
- *   Guessed   🔴 — pure pattern guess, unverified, low confidence → don't send, verify or switch person
- *   None         — no email at all
+ * Modern brands (Alo, Vuori, Gymshark, Oner Active…) run Google Workspace
+ * catch-all domains that intentionally defeat SMTP verification. SMTP-only trust
+ * therefore permanently suppresses real contacts. So we tier by SOURCE, not just
+ * SMTP success:
+ *
+ *   Verified (100) 🟢 — SMTP-confirmed or Hunter-confirmed deliverable.
+ *   Trusted  (90)  🟢 — from a people database (Apollo / RocketReach / ZoomInfo);
+ *                        the person + email are real even if SMTP is blocked.
+ *   Probable (70)  🟡 — pattern-generated on an MX-valid company domain / scraped.
+ *   Guessed  (40)  🔴 — AI-inferred / low-confidence guess.
+ *   None           — no email at all.
+ *
+ * "Reachable" = Verified OR Trusted (see lib/contacts/access.ts). Auto-SEND still
+ * requires Verified (see lib/contacts/readiness.ts) — Trusted counts toward
+ * coverage/Access but isn't auto-blasted (bounce safety).
  */
-export type CredibilityTier = 'verified' | 'likely' | 'guessed' | 'none'
+export type CredibilityTier = 'verified' | 'trusted' | 'probable' | 'guessed' | 'none'
 
 export interface CredibilityInput {
   email?: string | null
@@ -20,23 +29,32 @@ export interface CredibilityInput {
 
 export interface Credibility {
   tier: CredibilityTier
-  tierLabel: string      // ✓ Verified / ~ Likely / ? Guessed / 无邮箱
-  sourceLabel: string    // Apollo / Hunter / 官网抓取 / 格式推测 / 网络检索 / AI 推断
-  statusLabel: string    // 可达 / 接收全部 / 风险 / 未验证 / 不可达
+  score: number          // 100 / 90 / 70 / 40 / 0
+  tierLabel: string      // ✓ Verified / ◆ Trusted / ~ Probable / ? Guessed / 无邮箱
+  sourceLabel: string    // Apollo / Hunter / RocketReach / 官网抓取 / 格式推测 / AI 推断
+  statusLabel: string
   risk: 'send' | 'caution' | 'avoid'
   riskLabel: string      // 🟢 可发 / 🟡 谨慎 / 🔴 勿发
   badgeClass: string     // tailwind classes for the tier badge
 }
 
-const TRUSTED = ['apollo', 'hunter', 'scraped', 'pattern_smtp', 'domain_search']
+/** SMTP/Hunter-confirmed sources → Verified. */
+const VERIFIED_SOURCES = ['hunter', 'pattern_smtp', 'domain_search']
+/** People-database sources → Trusted (real person/email even if SMTP is blocked). */
+const TRUSTED_SOURCES = ['apollo', 'rocketreach', 'zoominfo']
+/** Pattern/site-derived but plausible → Probable. */
+const PROBABLE_SOURCES = ['pattern_catchall', 'scraped', 'website_email', 'serper_domestic']
 
 const SOURCE_LABELS: Record<string, string> = {
   apollo: 'Apollo',
+  rocketreach: 'RocketReach',
+  zoominfo: 'ZoomInfo',
   hunter: 'Hunter',
-  scraped: '官网抓取',
   domain_search: 'Hunter 域名',
   pattern_smtp: 'SMTP 验证',
   pattern_catchall: '格式推测',
+  scraped: '官网抓取',
+  website_email: '官网邮箱',
   guessed: '格式推测',
   ai_inferred: 'AI 推断',
   serper_domestic: '网络检索',
@@ -48,22 +66,40 @@ export function computeCredibility(c: CredibilityInput): Credibility {
   const conf = c.email_confidence ?? 0
 
   if (!c.email || !c.email.trim()) {
-    return { tier: 'none', tierLabel: '无邮箱', sourceLabel: '—', statusLabel: '无邮箱', risk: 'avoid', riskLabel: '🔴 无邮箱', badgeClass: 'bg-gray-100 text-gray-500' }
+    return { tier: 'none', score: 0, tierLabel: '无邮箱', sourceLabel: '—', statusLabel: '无邮箱', risk: 'avoid', riskLabel: '🔴 无邮箱', badgeClass: 'bg-gray-100 text-gray-500' }
   }
+  // Known bounce → never send, lowest trust.
   if (c.email_deliverable === false) {
-    return { tier: 'guessed', tierLabel: '✗ 不可达', sourceLabel, statusLabel: '不可达（已退信）', risk: 'avoid', riskLabel: '🔴 勿发', badgeClass: 'bg-red-100 text-red-700' }
+    return { tier: 'guessed', score: 0, tierLabel: '✗ 不可达', sourceLabel, statusLabel: '不可达（已退信）', risk: 'avoid', riskLabel: '🔴 勿发', badgeClass: 'bg-red-100 text-red-700' }
   }
-  if (c.email_verified === true || c.email_deliverable === true) {
-    return { tier: 'verified', tierLabel: '✓ Verified', sourceLabel, statusLabel: '已验证可达', risk: 'send', riskLabel: '🟢 可发', badgeClass: 'bg-green-100 text-green-700' }
+  // Tier 1 — Verified: SMTP/Hunter confirmed.
+  if (c.email_verified === true || c.email_deliverable === true || VERIFIED_SOURCES.includes(source)) {
+    return { tier: 'verified', score: 100, tierLabel: '✓ Verified', sourceLabel, statusLabel: '已验证可达', risk: 'send', riskLabel: '🟢 可发', badgeClass: 'bg-green-100 text-green-700' }
   }
-  const trusted = TRUSTED.includes(source) || conf >= 0.6
-  if (trusted) {
-    return { tier: 'likely', tierLabel: '~ Likely', sourceLabel, statusLabel: '来源可信·未完全验证', risk: 'caution', riskLabel: '🟡 谨慎', badgeClass: 'bg-amber-100 text-amber-700' }
+  // Tier 2 — Trusted: people-database source (counts as reachable; SMTP not required).
+  if (TRUSTED_SOURCES.includes(source)) {
+    return { tier: 'trusted', score: 90, tierLabel: '◆ Trusted', sourceLabel, statusLabel: '可信源·人/邮箱真实', risk: 'send', riskLabel: '🟢 可达', badgeClass: 'bg-emerald-100 text-emerald-700' }
   }
-  return { tier: 'guessed', tierLabel: '? Guessed', sourceLabel, statusLabel: '推测·未验证', risk: 'avoid', riskLabel: '🔴 勿发', badgeClass: 'bg-red-100 text-red-700' }
+  // Tier 3 — Probable: pattern on a real domain / scraped, or decent confidence.
+  if (PROBABLE_SOURCES.includes(source) || conf >= 0.5) {
+    return { tier: 'probable', score: 70, tierLabel: '~ Probable', sourceLabel, statusLabel: '格式可能·未验证', risk: 'caution', riskLabel: '🟡 谨慎', badgeClass: 'bg-amber-100 text-amber-700' }
+  }
+  // Tier 4 — Guessed: AI-inferred / low-confidence.
+  return { tier: 'guessed', score: 40, tierLabel: '? Guessed', sourceLabel, statusLabel: '推测·未验证', risk: 'avoid', riskLabel: '🔴 勿发', badgeClass: 'bg-red-100 text-red-700' }
 }
 
-/** Sort weight so verified contacts rise to the top. */
+/** Sort weight so the most credible contacts rise to the top. */
 export function credibilityRank(tier: CredibilityTier): number {
-  return tier === 'verified' ? 3 : tier === 'likely' ? 2 : tier === 'guessed' ? 1 : 0
+  switch (tier) {
+    case 'verified': return 4
+    case 'trusted': return 3
+    case 'probable': return 2
+    case 'guessed': return 1
+    default: return 0
+  }
+}
+
+/** "Reachable" = a contact we can count on for coverage/access (Verified OR Trusted). */
+export function isReachableTier(tier: CredibilityTier): boolean {
+  return tier === 'verified' || tier === 'trusted'
 }

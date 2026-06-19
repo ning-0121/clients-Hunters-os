@@ -76,7 +76,8 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
           <span className="text-[11px] text-muted-foreground w-12">可信度</span>
           <Link href={qs({ cred: undefined })} className={chip(!p.cred)}>全部</Link>
           <Link href={qs({ cred: 'verified' })} className={chip(p.cred === 'verified')}>✓ Verified</Link>
-          <Link href={qs({ cred: 'likely' })} className={chip(p.cred === 'likely')}>~ Likely</Link>
+          <Link href={qs({ cred: 'trusted' })} className={chip(p.cred === 'trusted')}>◆ Trusted</Link>
+          <Link href={qs({ cred: 'probable' })} className={chip(p.cred === 'probable')}>~ Probable</Link>
           <Link href={qs({ cred: 'guessed' })} className={chip(p.cred === 'guessed')}>? Guessed</Link>
         </div>
         <div className="flex gap-2 flex-wrap items-center">

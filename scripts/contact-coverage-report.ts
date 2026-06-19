@@ -3,7 +3,8 @@
  *   npx tsx --env-file=.env.local scripts/contact-coverage-report.ts
  *
  * North Star: of the HIGH-VALUE (naturally A-grade) companies, what share have a
- * VERIFIED Champion or Decision-Maker (i.e. are actually reachable)? "Naturally A"
+ * REACHABLE Champion or Decision-Maker — Verified OR Trusted (people-DB sources
+ * count even when a catch-all domain blocks SMTP). "Naturally A"
  * is recomputed from the stored feasibility dimensions, so it counts the A-in-
  * waiting companies that the contact gate currently caps to B — exactly the
  * population this engine must convert into reachable accounts.
@@ -77,7 +78,7 @@ async function main() {
     const access = computeAccess(contactsByCompany.get(c.id as string) ?? [], { championContactIds: championIds })
     buckets[access.score] = (buckets[access.score] ?? 0) + 1
     scoreSum += access.score
-    if (access.hasVerifiedChampionOrDM) reachable++
+    if (access.hasReachableChampionOrDM) reachable++
     else unreachable.push({ name: (c.name as string) ?? c.id as string, score: access.score, missing: access.missingRoles })
   }
 
@@ -89,7 +90,7 @@ async function main() {
   console.log(`高价值(自然 A 级):          ${denom}`)
   console.log(`  其中已存为 customer_tier=A: ${storedA}  (其余被联系人闸门暂降为 B)`)
   console.log('──────────────────────────────────────────────')
-  console.log(`★ 北极星 — A 级中拥有「已验证 Champion / 决策人」:`)
+  console.log(`★ 北极星 — A 级中拥有「可达(已验证/可信) Champion / 决策人」:`)
   console.log(`    ${reachable} / ${denom}  =  ${pct(reachable, denom)}`)
   console.log(`平均 Access Score(A 级):    ${denom ? (scoreSum / denom).toFixed(1) : '—'} / 100`)
   console.log('──────────────────────────────────────────────')
