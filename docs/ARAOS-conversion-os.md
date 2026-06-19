@@ -4,6 +4,9 @@
 > 原则：复用 Companies / Contacts / Tasks / Outreach / Quote Intelligence / Buying Intent / Approvals，**禁止推倒重来**。
 > v2 变更：引入 **Deal（机会）层**；关系改为**定性状态**；老板看板加 **Revenue Forecast**；Next Action **强制**；customer_events 作**统一事件总线**。
 
+> **📐 定位(资本配置语言)** —— Conversion OS 是 **System of Allocation**(理论本体见 [`ARAOS-system-of-allocation.md`](ARAOS-system-of-allocation.md))里**资产从行权到收益**的那一段:**Deal = 行权 + 交割(origination)**——把概率化索取权转成合约现金流,不确定性在此坍缩、条款在此确定;**Revenue = 已实现现金流**(首单 = origination 完成,复购 = 红利);**customer_events 时间线 = Feedback Loop 的原始记录**("决策→结果"飞轮的底层);**Relationship Band = 收益期资产的关系状态**;**Revenue Forecast = 组合的前瞻 AUM(加权)**,是规模量纲、非北极星(北极星是 GTM 资本的 ROIC)。
+> **优先级**:Conversion OS **P0(本地 commit `40a1f0c`,已验收)应先上线**,P1(Relationship Band / Risk Pool / Deal Board / Revenue Forecast)紧随——这是当前最高优先级,先于完整配置引擎。
+
 ---
 
 ## 0. 结论先行

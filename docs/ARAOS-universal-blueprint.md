@@ -304,3 +304,5 @@ Marketing · Product · Engineering · Sales · HR · Finance
 
 不复制 Apollo/ZoomInfo（数据库）、HubSpot/Salesforce（CRM）、Outreach/Close（序列）。
 **ARAOS 的位置 = 给中小 B2B/外贸/制造商的"开箱即用获客 OS"**：用 Industry Playbook 把"找谁→找人→评分→策略→开发信→跟进"的行业 know-how 预置好，老板填一次 Company Profile、选个模板就能跑——这是 Apollo/HubSpot 不提供的"行业策略层"。护城河在 **Playbook 库 + 配置化执行引擎**，不在数据本身。
+
+> **📐 与定位层的关系** —— 本文档讲的是"通用化 / 多租户 / 行业策略层"这一**横向抽象**;而 ARAOS 的**理论本体**是 **System of Allocation(GTM 资本配置层)**,见 [`ARAOS-system-of-allocation.md`](ARAOS-system-of-allocation.md)。两者一致且互补:Playbook 提供"这一行怎么打"的**先验**(机会层 L1 的行业知识与权重),配置层负责"有限资源这一块投到哪个资产"的**决策**(L3)。差异化结论不变——CRM/Apollo/HubSpot 是充裕世界(记录/供给/流程)的下游工具,ARAOS 是稀缺世界的**配置决策层**;最终的护城河是**"决策→结果"的配置飞轮**,不是数据本身。
