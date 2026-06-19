@@ -8,7 +8,8 @@ import { createServiceClient }  from '@/lib/supabase/server'
 import { detectTechStack, scoreTechStack } from '@/lib/enrichment/technographics'
 import { detectHiringSignals }  from '@/lib/enrichment/hiring-signals'
 import { detectTriggers }       from '@/lib/enrichment/trigger-detector'
-import { findEmails }           from '@/lib/enrichment/email-finder'
+import { discoverPeople }       from '@/lib/enrichment/contact-discovery'
+import { toPersonCandidate, type PersonCandidate } from '@/lib/enrichment/contact-types'
 
 const ENRICH_SYSTEM_PROMPT = `You are an expert at identifying business decision-makers for activewear brands.
 Given company info, website text, tech stack, and hiring data — identify the most likely contacts.
@@ -17,7 +18,7 @@ Use all available signals: About page text, team sections, LinkedIn hints, email
 If you find real names, use them. If not, leave fullName empty.
 Return ONLY a raw JSON array — no markdown, no code blocks.`
 
-interface EnrichInput { companyId: string }
+interface EnrichInput { companyId: string; roleTarget?: string[] }
 
 interface InferredContact {
   fullName:         string
@@ -39,7 +40,7 @@ export class EnrichAgent extends BaseAgent {
   constructor() { super('enrich_agent') }
 
   async execute(context: AgentContext, input: unknown): Promise<AgentResult> {
-    const { companyId } = input as EnrichInput
+    const { companyId, roleTarget } = input as EnrichInput
     const startTime = Date.now()
     const supabase  = await createServiceClient()
 
@@ -74,24 +75,33 @@ export class EnrichAgent extends BaseAgent {
       console.log(`[EnrichAgent] 🎯 Trigger: ${triggerResult.primaryTrigger.type}`)
     }
 
-    // 5. AI contact inference
-    const contacts = await this.inferContacts(
+    // 5. AI contact inference (website/about-page derived) — fed into the waterfall.
+    const aiContacts = await this.inferContacts(
       company, websiteData, contactPageText, namesFromHtml, techStack, hiringSignal
     )
-
-    // 6. Email finder (Hunter API + SMTP verification waterfall)
-    const namedCandidates = contacts
+    const aiCandidates: PersonCandidate[] = aiContacts
       .filter(c => c.firstName && c.lastName)
-      .map(c => ({ firstName: c.firstName, lastName: c.lastName, title: c.title }))
+      .map(c => toPersonCandidate({
+        firstName: c.firstName, lastName: c.lastName, fullName: c.fullName,
+        title: c.title, email: c.email, linkedinUrl: c.linkedinUrl ?? undefined,
+        source: 'ai_inferred',
+      }))
 
-    const emailResults = await findEmails({
-      domain:         company.domain ?? '',
-      existingEmails: websiteData?.emails ?? [],
-      candidates:     namedCandidates,
-      skipSmtp:       !company.domain,
+    // 6. Contact discovery waterfall: Apollo → RocketReach → X-Ray → GitHub + the
+    //    AI/website candidates, all verified in ONE Hunter/SMTP pass. This finds the
+    //    real Sourcing/Production decision-maker AND confirms a verified email.
+    const discovered = await discoverPeople({
+      domain:          company.domain ?? null,
+      companyName:     (company.name as string) ?? null,
+      website:         (company.website as string) ?? null,
+      existingEmails:  websiteData?.emails ?? [],
+      roleTarget,
+      extraCandidates: aiCandidates,
+      limit:           8,
     })
-    if (emailResults.contacts.length) {
-      console.log(`[EnrichAgent] 📧 Emails found: ${emailResults.contacts.length} (${emailResults.domainStatus})`)
+    const verifiedCount = discovered.filter(d => d.emailVerified).length
+    if (discovered.length) {
+      console.log(`[EnrichAgent] 📇 Contacts: ${discovered.length} (${verifiedCount} verified email)`)
     }
 
     // 7. Update company
@@ -141,39 +151,42 @@ export class EnrichAgent extends BaseAgent {
       } catch {}
     }
 
-    // 9. Save contacts
+    // 9. Save discovered contacts (dedupe against existing by name / email / LinkedIn).
+    const { data: existingContacts } = await supabase
+      .from('contacts').select('full_name, email, linkedin_url').eq('company_id', companyId)
+    const seenName  = new Set((existingContacts ?? []).map(c => (c.full_name ?? '').toLowerCase()).filter(Boolean))
+    const seenEmail = new Set((existingContacts ?? []).map(c => (c.email ?? '').toLowerCase()).filter(Boolean))
+    const seenUrl   = new Set((existingContacts ?? []).map(c => c.linkedin_url).filter(Boolean))
+    const genericPrefixes = ['info@','hello@','contact@','support@','admin@','team@','sales@']
+
     let contactsSaved = 0
-    const merged = this.mergeContactsWithEmails(contacts, emailResults.contacts)
+    for (const c of discovered) {
+      const nameLc  = (c.fullName ?? '').toLowerCase()
+      const emailLc = (c.email ?? '').toLowerCase()
+      if (nameLc && seenName.has(nameLc)) continue
+      if (emailLc && seenEmail.has(emailLc)) continue
+      if (c.linkedinUrl && seenUrl.has(c.linkedinUrl)) continue
+      if (!c.fullName && emailLc && genericPrefixes.some(p => emailLc.startsWith(p))) continue
 
-    for (const contact of merged) {
-      const genericPrefixes = ['info@','hello@','contact@','support@','admin@','team@','sales@']
-      if (!contact.fullName && contact.email && genericPrefixes.some(p => contact.email!.startsWith(p))) continue
-
-      const row: Record<string, unknown> = {
-        company_id:       companyId,
-        full_name:        contact.fullName || null,
-        first_name:       contact.firstName || null,
-        last_name:        contact.lastName || null,
-        title:            contact.title,
-        role_type:        contact.roleType,
-        decision_level:   contact.decisionLevel,
-        email:            contact.email || null,
-        linkedin_url:     contact.linkedinUrl || null,
-        contact_priority: contact.priority,
-        reply_probability: contact.replyProbability,
-        source:           'ai_inferred',
-        status:           'uncontacted',
-      }
-
-      // Add new cols if schema is upgraded
-      try {
-        row.email_confidence = contact.emailConfidence ?? null
-        row.email_source     = contact.emailSource ?? 'ai_inferred'
-        row.email_verified   = contact.emailVerified ?? false
-      } catch {}
-
-      const { error } = await supabase.from('contacts').insert(row)
-      if (!error) contactsSaved++
+      const { error } = await supabase.from('contacts').insert({
+        company_id:        companyId,
+        full_name:         c.fullName,
+        first_name:        c.firstName,
+        last_name:         c.lastName,
+        title:             c.title || null,
+        role_type:         c.roleType,
+        decision_level:    c.decisionLevel,
+        email:             c.email,
+        linkedin_url:      c.linkedinUrl,
+        contact_priority:  c.contactPriority,
+        reply_probability: c.replyProbability,
+        email_confidence:  c.emailConfidence,
+        email_source:      c.emailSource,
+        email_verified:    c.emailVerified,
+        source:            c.source,
+        status:            'uncontacted',
+      })
+      if (!error) { contactsSaved++; if (nameLc) seenName.add(nameLc); if (emailLc) seenEmail.add(emailLc) }
     }
 
     // Fallback: save scraped email
@@ -202,13 +215,14 @@ export class EnrichAgent extends BaseAgent {
         techDetected:     techStack.detected,
         hiringDetected:   hiringSignal.detected,
         triggerType:      triggerResult.primaryTrigger?.type,
-        emailsFound:      emailResults.contacts.length,
-        enrichmentVersion: 2,
+        emailsFound:      discovered.filter(d => d.email).length,
+        verifiedContacts: verifiedCount,
+        enrichmentVersion: 3,
       },
       status: 'completed', durationMs: Date.now() - startTime,
     })
 
-    return { success: true, data: { contactsSaved, techScore, emailsFound: emailResults.contacts.length } }
+    return { success: true, data: { contactsSaved, techScore, verifiedContacts: verifiedCount } }
   }
 
   private async scrapeContactPages(website: string | null): Promise<{
@@ -295,38 +309,4 @@ Return JSON array (max 3). Empty string if name unknown.
     } catch { return [] }
   }
 
-  private mergeContactsWithEmails(
-    contacts: InferredContact[],
-    emailCandidates: Array<{ email: string; confidence: number; source: string }>,
-  ): InferredContact[] {
-    const result: InferredContact[] = []
-    for (const c of contacts) {
-      // Match on full first name AND at least 3 chars of last name to avoid spurious 3-char matches
-      const found = emailCandidates.find(e => {
-        const em = e.email.toLowerCase()
-        const fn = c.firstName?.toLowerCase() ?? ''
-        const ln = c.lastName?.toLowerCase() ?? ''
-        if (!fn || fn.length < 3) return false
-        return em.includes(fn) || (ln.length >= 3 && em.includes(fn.slice(0, 4)) && em.includes(ln.slice(0, 4)))
-      })
-      result.push({
-        ...c,
-        email:          c.email || found?.email,
-        emailConfidence: found?.confidence,
-        emailSource:    found?.source,
-        emailVerified:  found?.source === 'hunter' || found?.source === 'pattern_smtp',
-      })
-    }
-    for (const ec of emailCandidates) {
-      if (result.some(r => r.email === ec.email)) continue
-      result.push({
-        fullName:'', firstName:'', lastName:'', title:'Brand Contact',
-        roleType:'unknown', decisionLevel:'unknown', email: ec.email,
-        priority:4, replyProbability: ec.confidence * 0.4,
-        emailConfidence: ec.confidence, emailSource: ec.source,
-        emailVerified: ec.source === 'hunter',
-      })
-    }
-    return result.slice(0, 5)
-  }
 }

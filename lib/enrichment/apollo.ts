@@ -11,12 +11,23 @@
 
 const APOLLO_BASE = 'https://api.apollo.io/api/v1'
 
-/** Decision-maker titles we target at apparel brands / importers. */
+/**
+ * Decision-maker titles we target at apparel brands / importers — ordered by
+ * BUYING INFLUENCE so Apollo surfaces the actual OEM/ODM buyers first.
+ * P1 sourcing/production/merch  →  P2 product-dev/ops/supply-chain  →  P3 founder/CEO.
+ */
 export const APOLLO_TARGET_TITLES = [
-  'Head of Sourcing', 'Sourcing Manager', 'Purchasing Manager', 'Procurement Manager',
-  'Supply Chain Manager', 'Product Development Manager', 'Product Developer',
-  'Apparel Buyer', 'Buyer', 'Category Manager', 'Merchandising Manager',
-  'Head of Product', 'Founder', 'CEO', 'Owner',
+  // P1 — primary buying influence
+  'VP Sourcing', 'Director of Sourcing', 'Head of Sourcing', 'Sourcing Manager',
+  'Director of Production', 'Production Manager',
+  'Merchandising Director', 'Merchandising Manager',
+  'Purchasing Manager', 'Procurement Manager',
+  // P2 — product development / operations / supply chain
+  'Product Development Manager', 'Product Developer', 'Head of Product',
+  'Operations Manager', 'Supply Chain Manager',
+  'Apparel Buyer', 'Buyer', 'Category Manager',
+  // P3 — founder / CEO / owner (last: rarely the OEM buyer at brands with a sourcing org)
+  'Founder', 'CEO', 'Owner',
 ]
 
 export interface ApolloContact {
@@ -116,14 +127,23 @@ function toContact(p: ApolloRaw): ApolloContact {
   }
 }
 
-/** Map seniority/title to a contact priority (1 low .. 9 high). */
+/**
+ * Map a contact to a priority (1 low .. 9 high) by BUYING INFLUENCE.
+ * Sourcing/production/merchandising rank highest; founder/CEO are deliberately
+ * below them (at a brand with a sourcing org, the founder isn't the OEM buyer).
+ */
 export function apolloPriority(c: ApolloContact): number {
-  const s = (c.seniority ?? '').toLowerCase()
   const t = (c.title ?? '').toLowerCase()
-  if (/owner|founder|c_suite|cxo|ceo|chief/.test(s) || /founder|ceo|owner|chief/.test(t)) return 9
-  if (/vp|head|director/.test(s) || /head of|vp |director/.test(t)) return 8
-  if (/manager|sourcing|purchas|procure/.test(s) || /sourcing|purchas|procure|buyer|product develop/.test(t)) return 7
-  return 5
+  const s = (c.seniority ?? '').toLowerCase()
+  // P1 — sourcing / production / merchandising / purchasing
+  if (/sourcing|purchas|procure|production|merchandis/.test(t)) {
+    return /vp|head|director|chief/.test(t) || /vp|head|director|c_suite|cxo/.test(s) ? 9 : 8
+  }
+  // P2 — product development / operations / supply chain / buyer
+  if (/product|develop|operation|supply chain|buyer|category/.test(t)) return 7
+  // P3 — founder / CEO / owner
+  if (/founder|ceo|owner|chief|president/.test(t) || /owner|founder|c_suite|cxo/.test(s)) return 5
+  return 4
 }
 
 export function apolloRoleType(title: string): string {

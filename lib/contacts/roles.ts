@@ -20,18 +20,22 @@ export const ROLE_LABELS: Record<ContactRole, string> = {
   other: '其他',
 }
 
-// Priority for "who to contact first" (QIMO OEM/ODM).
+// Priority for "who to contact first" — ranked by BUYING INFLUENCE, not seniority.
+// P1 sourcing/production/merch > P2 product-dev/ops/supply-chain > P3 founder/CEO > P4 rest.
+// Founder is deliberately BELOW sourcing/production: at a brand with a real sourcing
+// org, the founder is rarely the person who places OEM/ODM orders.
 const RANK: Record<ContactRole, number> = {
-  founder: 9, sourcing: 8, product: 7, production: 6,
-  operations: 5, marketing: 4, sales: 3, finance: 2, hr: 1, other: 0,
+  sourcing: 10, production: 9, product: 8, operations: 6,
+  founder: 5, marketing: 4, sales: 3, finance: 2, hr: 1, other: 0,
 }
 export const roleRank = (r: ContactRole) => RANK[r] ?? 0
 
 const PATTERNS: [ContactRole, RegExp][] = [
   ['founder',    /(founder|co-?founder|owner|ceo|chief executive|president|总裁|创始|老板|总经理|董事)/i],
   ['sourcing',   /(sourcing|procure|purchas|buyer|采购|供应链采购)/i],
-  ['product',    /(product|merchandis|design|buyer|品类|产品|买手|设计)/i],
+  // production before product: "Production" contains the substring "product".
   ['production', /(production|supply chain|manufactur|operations? manager|plant|生产|供应链|跟单|工厂)/i],
+  ['product',    /(product|merchandis|design|品类|产品|买手|设计)/i],
   ['operations', /(operation|coo|运营|ops)/i],
   ['marketing',  /(marketing|brand|growth|cmo|市场|品牌|增长)/i],
   ['sales',      /(sales|business development|bd|commercial|销售|业务)/i],

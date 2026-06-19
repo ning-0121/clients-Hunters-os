@@ -14,7 +14,9 @@
     "test:tiering": "npx tsx scripts/test-tiering-reports.ts",
     "validate": "npx tsx --env-file=.env.local scripts/validate-sprint.ts",
     "validate:quote": "npx tsx --env-file=.env.local scripts/validate-quote.ts",
-    "validate:conversion": "npx tsx scripts/validate-conversion.ts"
+    "validate:conversion": "npx tsx scripts/validate-conversion.ts",
+    "validate:contact-intelligence": "npx tsx scripts/validate-contact-intelligence.ts",
+    "report:contact-coverage": "npx tsx --env-file=.env.local scripts/contact-coverage-report.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

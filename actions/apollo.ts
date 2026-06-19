@@ -1,59 +1,83 @@
 'use server'
 
 import { createServiceClient } from '@/lib/supabase/server'
-import { apolloFindContacts, apolloPriority, apolloRoleType, apolloConfigured } from '@/lib/enrichment/apollo'
+import { discoverPeople } from '@/lib/enrichment/contact-discovery'
 import { revalidatePath } from 'next/cache'
 
 /**
- * Find decision-maker contacts for a company via Apollo and save new ones.
- * Synchronous (Apollo search ~1-3s). Dedups by LinkedIn URL / full name.
- * No-ops with a clear signal if APOLLO_API_KEY isn't set.
+ * Manual "find decision-makers" action for a company.
+ *
+ * Runs the full Contact Discovery waterfall (Apollo → RocketReach → X-Ray →
+ * GitHub) with email verification, and saves new verified/likely contacts.
+ * Dedups by full name / email / LinkedIn URL. Sources without an API key are
+ * skipped silently — if none are configured, nothing is found (no-op).
+ *
+ * (Kept the `triggerApolloLookup` name so existing page forms keep working.)
  */
 export async function triggerApolloLookup(formData: FormData): Promise<void> {
   const companyId = formData.get('companyId') as string
   if (!companyId) return
 
   const sb = await createServiceClient()
-  const { data: company } = await sb.from('companies').select('domain, source_raw').eq('id', companyId).single()
+  const { data: company } = await sb
+    .from('companies')
+    .select('name, domain, website, source_raw')
+    .eq('id', companyId)
+    .single()
   if (!company) return
 
-  if (!apolloConfigured()) {
-    // Surface a clear status on the page so it's obvious the key is missing.
-    const sourceRaw = { ...((company.source_raw as Record<string, unknown>) ?? {}), apollo: { error: 'APOLLO_API_KEY 未配置', at: new Date().toISOString() } }
-    await sb.from('companies').update({ source_raw: sourceRaw }).eq('id', companyId)
-    revalidatePath(`/companies/${companyId}`)
-    return
-  }
+  const discovered = await discoverPeople({
+    domain:      company.domain,
+    companyName: company.name as string,
+    website:     company.website as string,
+    limit:       8,
+  })
 
-  const people = await apolloFindContacts({ domain: company.domain, limit: 8 })
-
-  // Dedup against existing contacts (by linkedin_url or full_name).
-  const { data: existing } = await sb.from('contacts').select('full_name, linkedin_url').eq('company_id', companyId)
-  const seenName = new Set((existing ?? []).map((c) => (c.full_name ?? '').toLowerCase()).filter(Boolean))
-  const seenUrl = new Set((existing ?? []).map((c) => c.linkedin_url).filter(Boolean))
+  // Dedup against existing contacts (by full_name / email / linkedin_url).
+  const { data: existing } = await sb.from('contacts').select('full_name, email, linkedin_url').eq('company_id', companyId)
+  const seenName  = new Set((existing ?? []).map((c) => (c.full_name ?? '').toLowerCase()).filter(Boolean))
+  const seenEmail = new Set((existing ?? []).map((c) => (c.email ?? '').toLowerCase()).filter(Boolean))
+  const seenUrl   = new Set((existing ?? []).map((c) => c.linkedin_url).filter(Boolean))
 
   let saved = 0
-  for (const p of people) {
-    if ((p.linkedinUrl && seenUrl.has(p.linkedinUrl)) || seenName.has(p.fullName.toLowerCase())) continue
+  let verified = 0
+  for (const c of discovered) {
+    const nameLc = (c.fullName ?? '').toLowerCase()
+    const emailLc = (c.email ?? '').toLowerCase()
+    if (nameLc && seenName.has(nameLc)) continue
+    if (emailLc && seenEmail.has(emailLc)) continue
+    if (c.linkedinUrl && seenUrl.has(c.linkedinUrl)) continue
+
     const { error } = await sb.from('contacts').insert({
-      company_id:       companyId,
-      full_name:        p.fullName || null,
-      first_name:       p.firstName || null,
-      last_name:        p.lastName || null,
-      title:            p.title || null,
-      role_type:        apolloRoleType(p.title),
-      decision_level:   apolloPriority(p) >= 8 ? 'decision_maker' : 'influencer',
-      email:            p.email || null,
-      linkedin_url:     p.linkedinUrl || null,
-      contact_priority: apolloPriority(p),
-      reply_probability: p.email ? 0.3 : 0.15,
-      source:           'apollo',
-      status:           'uncontacted',
+      company_id:        companyId,
+      full_name:         c.fullName,
+      first_name:        c.firstName,
+      last_name:         c.lastName,
+      title:             c.title || null,
+      role_type:         c.roleType,
+      decision_level:    c.decisionLevel,
+      email:             c.email,
+      linkedin_url:      c.linkedinUrl,
+      contact_priority:  c.contactPriority,
+      reply_probability: c.replyProbability,
+      email_confidence:  c.emailConfidence,
+      email_source:      c.emailSource,
+      email_verified:    c.emailVerified,
+      source:            c.source,
+      status:            'uncontacted',
     })
-    if (!error) saved++
+    if (!error) {
+      saved++
+      if (c.emailVerified) verified++
+      if (nameLc) seenName.add(nameLc)
+      if (emailLc) seenEmail.add(emailLc)
+    }
   }
 
-  const sourceRaw = { ...((company.source_raw as Record<string, unknown>) ?? {}), apollo: { found: people.length, saved, at: new Date().toISOString() } }
+  const sourceRaw = {
+    ...((company.source_raw as Record<string, unknown>) ?? {}),
+    contact_discovery: { found: discovered.length, saved, verified, at: new Date().toISOString() },
+  }
   await sb.from('companies').update({ source_raw: sourceRaw, updated_at: new Date().toISOString() }).eq('id', companyId)
 
   revalidatePath(`/companies/${companyId}`)
