@@ -18,6 +18,7 @@ import { loadFactoryPool } from '@/lib/factory/recommend'
 import { extractJson } from '@/lib/llm/json'
 import { hasValidContact } from '@/lib/contacts/readiness'
 import { companyHuntDue } from '@/lib/contacts/hunt-cadence'
+import { stabilizeDims, hasExistingDims } from '@/lib/tiering/stability'
 
 // Valid target_customer_segment enum values (the column is an enum, NOT free prose).
 const SEGMENT_ENUM = new Set([
@@ -68,7 +69,8 @@ export class TieringAgent extends BaseAgent {
   constructor() { super('tiering_agent') }
 
   async execute(context: AgentContext, input: unknown): Promise<AgentResult> {
-    const { companyId, queueReport = true } = input as { companyId: string; queueReport?: boolean }
+    const { companyId, queueReport = true, recontactOnly = false } =
+      input as { companyId: string; queueReport?: boolean; recontactOnly?: boolean }
     const startTime = Date.now()
     const supabase = await createServiceClient()
 
@@ -81,6 +83,12 @@ export class TieringAgent extends BaseAgent {
     const { data: contacts } = await supabase
       .from('contacts').select('full_name, title, email, email_verified, email_deliverable, email_confidence, email_source, phone, whatsapp, decision_level')
       .eq('company_id', companyId).order('contact_priority', { ascending: false }).limit(5)
+
+    // Refind re-tier: contacts changed but strategic dims have NOT — re-apply the
+    // contact gate using the EXISTING dims (no LLM re-score, so no A↔D noise flip).
+    if (recontactOnly && hasExistingDims(company)) {
+      return this.recontactGate(supabase, company, companyId, contacts ?? [], startTime)
+    }
 
     const userMessage = this.buildPrompt(company, score, contacts ?? [])
 
@@ -117,6 +125,23 @@ export class TieringAgent extends BaseAgent {
       strategicValueScore:        this.clamp(out.strategic_value_score),
       paymentRiskScore:           this.clamp(out.payment_risk_score),
       complianceLevel,
+    }
+
+    // Stability: ignore ±1 LLM noise on an already-tiered company so a strategic
+    // account never flips A↔D on re-scoring; genuine moves of ≥2 points still apply.
+    if (hasExistingDims(company)) {
+      const s = stabilizeDims({
+        customerScaleScore:         (company.customer_scale_score as number | null) ?? undefined,
+        productMatchScore:          (company.product_match_score as number | null) ?? undefined,
+        conversionFeasibilityScore: (company.conversion_feasibility_score as number | null) ?? undefined,
+        strategicValueScore:        (company.strategic_value_score as number | null) ?? undefined,
+        paymentRiskScore:           (company.payment_risk_score as number | null) ?? undefined,
+      }, dims)
+      dims.customerScaleScore = s.customerScaleScore
+      dims.productMatchScore = s.productMatchScore
+      dims.conversionFeasibilityScore = s.conversionFeasibilityScore
+      dims.strategicValueScore = s.strategicValueScore
+      dims.paymentRiskScore = s.paymentRiskScore
     }
 
     // Contact readiness — A requires a verified way to reach a key person.
@@ -207,6 +232,63 @@ export class TieringAgent extends BaseAgent {
     })
 
     return { success: true, data: { tier, complianceLevel, factoryType, reportDepth: depth, dims } }
+  }
+
+  /**
+   * Refind re-tier: contacts changed but strategic dims have NOT. Re-apply ONLY the
+   * contact gate (park/un-park + A-cap) using the company's EXISTING dims — no LLM,
+   * so strategic scoring can never drift and flip the tier. This is the path taken
+   * when enrich runs for reason='refind_contacts'.
+   */
+  private async recontactGate(
+    supabase: Awaited<ReturnType<typeof createServiceClient>>,
+    company: Record<string, unknown>,
+    companyId: string,
+    contacts: Array<Record<string, unknown>>,
+    startTime: number,
+  ): Promise<AgentResult> {
+    const dims: TierDimensions = {
+      customerScaleScore:         this.clamp(company.customer_scale_score),
+      productMatchScore:          this.clamp(company.product_match_score),
+      conversionFeasibilityScore: this.clamp(company.conversion_feasibility_score),
+      strategicValueScore:        this.clamp(company.strategic_value_score),
+      paymentRiskScore:           this.clamp(company.payment_risk_score),
+      complianceLevel: isComplianceLevel(company.compliance_level) ? company.compliance_level : 'basic_docs',
+    }
+    const readiness: ContactReadiness = {
+      hasVerifiedEmail: contacts.some((c) => c.email_verified === true || c.email_deliverable === true),
+      hasVerifiedKeyContact: contacts.some((c) =>
+        c.email_verified === true || c.email_deliverable === true || (typeof c.phone === 'string' && c.phone.trim().length > 0)),
+      hasAnyContact: contacts.some((c) => (!!c.full_name && String(c.full_name).trim() !== '') || (!!c.email && String(c.email).trim() !== '')),
+    }
+    const natural = naturalTier(dims)
+    const tier = classifyTier(dims, readiness)
+    const gateNote = contactGateNote(natural, readiness)
+    const reachable = hasValidContact(contacts as unknown as Parameters<typeof hasValidContact>[0])
+    const earlyStage = ['raw', 'enriched', 'scored'].includes(company.status as string)
+    const parked = !reachable && earlyStage
+    const parkNote = parked ? '⛔ 暂无有效联系方式 → 已入池等待补齐联系人；AI 将按节奏重找。' : null
+    const baseReason = (company.tier_reasoning as string | null)?.split('\n')[0] ?? null
+
+    await supabase.from('companies').update({
+      ...(parked ? { status: 'awaiting_contact' } : {}),
+      customer_tier:  tier,
+      tier_reasoning: [baseReason, gateNote, parkNote].filter(Boolean).join('\n') || null,
+      tiered_at:      new Date().toISOString(),
+      updated_at:     new Date().toISOString(),
+    }).eq('id', companyId)
+
+    if (parked && companyHuntDue({ tier, sourceRaw: company.source_raw, nowMs: Date.now() })) {
+      await this.enqueueJob('enrich_company', { companyId, reason: 'refind_contacts' }, 3)
+    }
+
+    await this.logAction({
+      companyId, actionType: 'tier_company',
+      inputData: { companyId, recontactOnly: true },
+      outputData: { tier, naturalTier: natural, reused: true },
+      status: 'completed', durationMs: Date.now() - startTime,
+    })
+    return { success: true, data: { tier, reused: true } }
   }
 
   private clamp(n: unknown): number {

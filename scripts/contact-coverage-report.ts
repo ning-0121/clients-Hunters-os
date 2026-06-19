@@ -13,6 +13,7 @@
  */
 import { createDirectClient } from '@/lib/supabase/server'
 import { naturalTier, isComplianceLevel, type TierDimensions } from '@/lib/tiering/tiering'
+import { isHighValueAccount } from '@/lib/tiering/stability'
 import { computeAccess, type AccessContact } from '@/lib/contacts/access'
 
 const num = (v: unknown) => (typeof v === 'number' ? v : 0)
@@ -44,7 +45,9 @@ async function main() {
       paymentRiskScore: num(c.payment_risk_score),
       complianceLevel: isComplianceLevel(c.compliance_level) ? c.compliance_level : 'basic_docs',
     }
-    return naturalTier(dims) === 'A'
+    // Robust denominator: recomputed natural-A OR a stored customer_tier of A, so a
+    // single noisy re-score can't collapse the high-value denominator to zero.
+    return isHighValueAccount(naturalTier(dims), c.customer_tier as string | null)
   })
   const aIds = naturalA.map((c) => c.id as string)
 

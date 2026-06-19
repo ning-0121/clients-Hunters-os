@@ -13,6 +13,8 @@ import { parseLinkedInTitle } from '@/lib/enrichment/xray'
 import { toPersonCandidate } from '@/lib/enrichment/contact-types'
 import { computeAccess, type AccessContact } from '@/lib/contacts/access'
 import { computeCredibility } from '@/lib/contacts/credibility'
+import { naturalTier, type TierDimensions } from '@/lib/tiering/tiering'
+import { stabilizeScore, stabilizeDims, hasExistingDims, isHighValueAccount } from '@/lib/tiering/stability'
 import { isHuntDue, huntCadenceMs, huntValue, companyHuntDue, stampHunt, lastHuntAt } from '@/lib/contacts/hunt-cadence'
 import { pickMailDomain, registrableDomain, stripStorefront } from '@/lib/enrichment/mail-domain'
 
@@ -125,6 +127,27 @@ ok('Champion(trusted)+DM(trusted) ⇒ Access=100', computeAccess([
   trusted({ id: '1', is_champion: true, decision_level: 'influencer', role_type: 'operations' }),
   trusted({ id: '2', decision_level: 'decision_maker', role_type: 'sourcing' }),
 ]).score === 100)
+
+console.log('\n#P0.6 Scoring stability(不因 LLM 噪声翻 A↔D)')
+const dimsOf = (scale: number, product: number, strat: number, conv: number): TierDimensions =>
+  ({ customerScaleScore: scale, productMatchScore: product, conversionFeasibilityScore: conv, strategicValueScore: strat, paymentRiskScore: 2, complianceLevel: 'basic_docs' })
+ok('stabilizeScore(7→6) 保留 7(挡噪声降级)', stabilizeScore(7, 6) === 7)
+ok('stabilizeScore(6→7) 保留 6(挡噪声变动)', stabilizeScore(6, 7) === 6)
+ok('stabilizeScore(7→4) 采纳 4(大幅变动)', stabilizeScore(7, 4) === 4)
+ok('stabilizeScore(null→6)=6(首次)', stabilizeScore(null, 6) === 6)
+ok('hasExistingDims({strat:7})=true', hasExistingDims({ strategic_value_score: 7 }) === true)
+ok('hasExistingDims({})=false', hasExistingDims({}) === false)
+// Oner-like account: strategic 7→6 noise must NOT flip A→D.
+ok('Oner-like 自然 A(scale8/product9/strat7/conv2)', naturalTier(dimsOf(8, 9, 7, 2)) === 'A')
+ok('未稳定化 strat=6 ⇒ D(暴露 bug)', naturalTier(dimsOf(8, 9, 6, 2)) === 'D')
+const stableStrat = stabilizeDims({ customerScaleScore: 8, productMatchScore: 9, conversionFeasibilityScore: 2, strategicValueScore: 7, paymentRiskScore: 2 }, { customerScaleScore: 8, productMatchScore: 9, conversionFeasibilityScore: 2, strategicValueScore: 6, paymentRiskScore: 2 })
+ok('稳定化后 strat 仍为 7 ⇒ 仍 A(修复)', naturalTier({ ...dimsOf(8, 9, stableStrat.strategicValueScore, 2) }) === 'A')
+ok('大幅 strat 7→4 稳定化后采纳 ⇒ D(强信号允许)', naturalTier(dimsOf(8, 9, stabilizeDims({ strategicValueScore: 7 }, { customerScaleScore: 8, productMatchScore: 9, conversionFeasibilityScore: 2, strategicValueScore: 4, paymentRiskScore: 2 }).strategicValueScore, 2)) === 'D')
+
+console.log('\n#P0.6 报告分母稳健(单次重评不塌缩)')
+ok('自然 D 但存储 A ⇒ 计入分母', isHighValueAccount('D', 'A') === true)
+ok('自然 A 存储 B ⇒ 计入分母', isHighValueAccount('A', 'B') === true)
+ok('自然 D 存储 B ⇒ 不计入', isHighValueAccount('D', 'B') === false)
 
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`)
 process.exit(fail > 0 ? 1 : 0)

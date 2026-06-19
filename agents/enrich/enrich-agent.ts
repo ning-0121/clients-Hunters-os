@@ -19,7 +19,7 @@ Use all available signals: About page text, team sections, LinkedIn hints, email
 If you find real names, use them. If not, leave fullName empty.
 Return ONLY a raw JSON array — no markdown, no code blocks.`
 
-interface EnrichInput { companyId: string; roleTarget?: string[] }
+interface EnrichInput { companyId: string; roleTarget?: string[]; reason?: string }
 
 interface InferredContact {
   fullName:         string
@@ -41,7 +41,7 @@ export class EnrichAgent extends BaseAgent {
   constructor() { super('enrich_agent') }
 
   async execute(context: AgentContext, input: unknown): Promise<AgentResult> {
-    const { companyId, roleTarget } = input as EnrichInput
+    const { companyId, roleTarget, reason } = input as EnrichInput
     const startTime = Date.now()
     const supabase  = await createServiceClient()
 
@@ -208,8 +208,14 @@ export class EnrichAgent extends BaseAgent {
       }
     }
 
-    // 10. Queue scoring
-    await this.enqueueJob('score_company', { companyId }, 3)
+    // 10. Next step. A refind on an already-tiered company is CONTACTS-ONLY: re-apply
+    //     the contact gate with existing dims (no re-score → no A↔D scoring drift).
+    //     First-time / non-refind enrichment runs the full score → tier pipeline.
+    if (reason === 'refind_contacts' && company.customer_tier) {
+      await this.enqueueJob('tier_company', { companyId, recontactOnly: true }, 3)
+    } else {
+      await this.enqueueJob('score_company', { companyId }, 3)
+    }
 
     await this.logAction({
       companyId, actionType: 'enrich_company',
