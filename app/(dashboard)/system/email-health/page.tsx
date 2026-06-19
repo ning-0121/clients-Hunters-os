@@ -1,5 +1,7 @@
 import { checkDeliverability } from '@/lib/email/deliverability'
 import { getSendStats } from '@/lib/email/throttle'
+import { checkBounceHealth } from '@/lib/email/bounce-rate'
+import { createServiceClient } from '@/lib/supabase/server'
 
 const SENDER_DOMAIN = (process.env.SENDER_EMAIL ?? 'alex@jojofashion.us').split('@')[1]
 
@@ -30,9 +32,10 @@ function ScoreMeter({ score }: { score: number }) {
 }
 
 export default async function EmailHealthPage() {
-  const [report, stats] = await Promise.all([
+  const [report, stats, bounce] = await Promise.all([
     checkDeliverability(SENDER_DOMAIN),
     getSendStats(),
+    createServiceClient().then(checkBounceHealth),
   ])
 
   const checks = [
@@ -69,6 +72,22 @@ export default async function EmailHealthPage() {
             ⚠️ 批量发送前请先修复以下问题 — 否则邮件可能进入垃圾箱。
           </p>
         )}
+      </div>
+
+      {/* Bounce rate guardrail */}
+      <div className="rounded-lg border p-5 space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">退信率（近 14 天）</h2>
+          <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+            bounce.paused ? 'bg-red-100 text-red-800' : bounce.rate >= 0.04 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+          }`}>
+            {(bounce.rate * 100).toFixed(1)}%
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground">发送 {bounce.sent} · 退信 {bounce.bounced} · 阈值 8%（满 20 封才判定）</p>
+        {bounce.paused
+          ? <p className="text-sm text-red-600">🛑 已自动暂停发送：{bounce.reason}</p>
+          : <p className="text-xs text-muted-foreground">退信率达阈值会自动暂停发送，避免烧毁发信域名声誉。</p>}
       </div>
 
       {/* DNS Checks */}

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { approveAction, rejectAction } from '@/actions/approvals'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { scoreSpamRisk, SPAM_LEVEL_LABEL } from '@/lib/email/spam-score'
 
 // Approve-button copy by approval type (behavior unchanged — copy only).
 const APPROVE_LABELS: Record<string, string> = {
@@ -95,6 +96,16 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
                 <pre className="text-sm bg-muted px-3 py-3 rounded whitespace-pre-wrap font-sans">{draft.body}</pre>
               </div>
             )}
+            {(() => {
+              const spam = scoreSpamRisk(draft.subject ?? '', draft.body ?? '')
+              return (
+                <div className={`text-xs rounded px-3 py-2 ${spam.level === 'high' ? 'bg-red-50 text-red-700' : spam.level === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
+                  {SPAM_LEVEL_LABEL[spam.level]}（{spam.score}/100）
+                  {spam.signals.length > 0 && <span className="ml-1">— {spam.signals.map((s) => `${s.label}：${s.hint}`).join('；')}</span>}
+                  {spam.level !== 'low' && <span className="ml-1">→ 建议改写后再发，避免进垃圾箱。</span>}
+                </div>
+              )
+            })()}
           </CardContent>
         </Card>
       )}

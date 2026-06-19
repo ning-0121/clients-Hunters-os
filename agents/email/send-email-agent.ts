@@ -6,6 +6,7 @@ import { BaseAgent, type AgentContext, type AgentResult } from '@/agents/base-ag
 import { createServiceClient } from '@/lib/supabase/server'
 import { sendGmail, isGmailConfigured } from '@/lib/email/gmail'
 import { checkSendThrottle, recordSend } from '@/lib/email/throttle'
+import { checkBounceHealth } from '@/lib/email/bounce-rate'
 import { resolveSendableEmail } from '@/lib/email/resolve'
 
 interface SendEmailInput {
@@ -35,6 +36,18 @@ export class SendEmailAgent extends BaseAgent {
         })
         .eq('payload->>outreachLogId', outreachLogId)
       return { success: false, error: `Throttled: ${throttle.reason}` }
+    }
+
+    // 0b. Domain bounce-rate guardrail — if the recent bounce rate is too high,
+    // pause sending (re-queue) so the team cleans the list / fixes auth first.
+    const health = await checkBounceHealth(supabase)
+    if (health.paused) {
+      console.warn(`[SendEmailAgent] 🛑 Bounce-rate pause: ${health.reason}`)
+      await supabase
+        .from('agent_queue')
+        .update({ status: 'waiting', scheduled_for: new Date(Date.now() + 6 * 3600_000).toISOString() })
+        .eq('payload->>outreachLogId', outreachLogId)
+      return { success: false, error: `Bounce-rate pause: ${health.reason}` }
     }
 
     // 1. Load the outreach log

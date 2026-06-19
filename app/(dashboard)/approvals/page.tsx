@@ -2,6 +2,7 @@ import { createServiceClient as createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { approveAction, rejectAction } from '@/actions/approvals'
+import { scoreSpamRisk, SPAM_LEVEL_LABEL } from '@/lib/email/spam-score'
 
 const RISK_LABELS: Record<string, string> = {
   low:      '低',
@@ -98,6 +99,16 @@ export default async function ApprovalsPage() {
                       <p className="text-sm font-medium">{draft.subject}</p>
                     </div>
                   )}
+
+                  {/* Spam-risk lint (email drafts only) */}
+                  {draft?.body && (() => {
+                    const spam = scoreSpamRisk(draft.subject ?? '', draft.body ?? '')
+                    return (
+                      <div className={`text-xs rounded px-2 py-1 mb-3 inline-block ${spam.level === 'high' ? 'bg-red-50 text-red-700' : spam.level === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
+                        {SPAM_LEVEL_LABEL[spam.level]}（{spam.score}/100）{spam.level !== 'low' && spam.signals[0] ? ` · ${spam.signals[0].label}：${spam.signals[0].hint}` : ''}
+                      </div>
+                    )
+                  })()}
 
                   {/* Email Body (expandable) */}
                   {draft?.body && (

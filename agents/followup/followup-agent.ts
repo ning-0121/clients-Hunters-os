@@ -22,6 +22,8 @@ Follow-up email rules:
 - Do NOT repeat what you said in the first email
 - Each step has a different angle (see below)
 - Never be pushy or salesy — one soft question is enough
+- Anti-spam: no trigger words (free / guarantee / act now / limited time / click here / 100% / ALL-CAPS / "!!!"),
+  at most one link, no price/percent stuffing — write like a real one-to-one note, not a blast
 - Sign as "Alex"
 - Return ONLY valid JSON, no markdown`
 
@@ -75,9 +77,32 @@ export class FollowupAgent extends BaseAgent {
 
     if (replyEvent || company.status === 'engaged' || company.status === 'qualified') {
       await supabase.from('followup_runs')
-        .update({ status: 'replied', skipped_reason: 'Company already replied' })
+        .update({ status: 'replied' })
         .eq('id', followupRunId)
       return { success: true, data: { skipped: true, reason: 'Already replied' } }
+    }
+
+    // 2b. Bounce-aware: stop if the original email bounced or the contact's email
+    // is now undeliverable. Re-sending to a dead address only burns sender reputation.
+    const [{ data: origLog }, { data: bouncedLogs }] = await Promise.all([
+      supabase.from('outreach_logs').select('status').eq('id', run.original_log_id).maybeSingle(),
+      supabase.from('outreach_logs').select('id').eq('company_id', run.company_id).eq('status', 'bounced').limit(1),
+    ])
+    let dead = origLog?.status === 'bounced' || (bouncedLogs?.length ?? 0) > 0
+    if (!dead && run.contact_id) {
+      const { data: ct } = await supabase.from('contacts').select('email_deliverable').eq('id', run.contact_id).maybeSingle()
+      if (ct?.email_deliverable === false) dead = true
+    }
+    if (dead) {
+      // (followup_runs.skipped_reason is absent on the live DB; reason is logged below)
+      await supabase.from('followup_runs')
+        .update({ status: 'skipped' })
+        .eq('id', followupRunId)
+      await this.logAction({
+        companyId: run.company_id, actionType: 'draft_followup',
+        outputData: { skipped: true, reason: 'bounced_or_undeliverable' }, status: 'skipped',
+      })
+      return { success: true, data: { skipped: true, reason: 'bounced_or_undeliverable' } }
     }
 
     // 3. Load contact and original email for context

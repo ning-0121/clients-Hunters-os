@@ -314,7 +314,9 @@ export default async function BdTodayPage() {
               <Card key={r.id}><CardContent className="py-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${REPLY_GROUP_STYLES[g]}`}>{REPLY_GROUP_LABELS[g]}</span>
-                  <span className="font-medium text-sm">{decodeHtml(c?.name ?? r.from_email ?? '客户')}</span>
+                  {r.company_id
+                    ? <Link href={`/companies/${r.company_id}`} className="font-medium text-sm hover:underline">{decodeHtml(c?.name ?? r.from_email ?? '客户')}</Link>
+                    : <span className="font-medium text-sm">{decodeHtml(c?.name ?? r.from_email ?? '客户')}</span>}
                   <span className="text-[10px] text-muted-foreground ml-auto">{new Date(r.received_at).toLocaleDateString()}</span>
                 </div>
                 {r.reply_body && <p className="text-xs text-muted-foreground line-clamp-2">{decodeHtml(r.reply_body).slice(0, 180)}</p>}
