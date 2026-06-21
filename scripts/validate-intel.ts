@@ -5,6 +5,7 @@
  */
 import { buildBrief } from '@/lib/intel/brief'
 import { computeAccess, type AccessContact } from '@/lib/contacts/access'
+import { computePenetration } from '@/lib/intel/penetration'
 import type { BriefContact, BriefInputs, CompanyFacts } from '@/lib/intel/types'
 
 let pass = 0, fail = 0
@@ -82,6 +83,21 @@ const growth = buildBrief(mkInputs({
 ok('类型 = growth_activewear', growth.customerType.type === 'growth_activewear')
 ok('采购模型 = oem_direct', growth.purchasingModel.model === 'oem_direct')
 ok('headline 30 秒可读(非空)', growth.executive.headline.length > 10)
+
+console.log('\n#Penetration Score(买家委员会 = 唯一 KPI)')
+const ve = { email: 'a@b.com', email_verified: true as const }
+const sk = (role: string, x: Partial<import('@/lib/intel/penetration').PenetrationContact> = {}) =>
+  ({ full_name: 'A B', role_type: role, decision_level: 'decision_maker', ...x })
+const c3 = (r: string) => sk(r, { ...ve, linkedin_url: 'https://linkedin.com/in/x' })
+ok('0 联系人 ⇒ not_penetrated / 0 分', (() => { const p = computePenetration([]); return p.status === 'not_penetrated' && p.score === 0 })())
+ok('1 关键人 ⇒ partial', computePenetration([sk('sourcing', ve)]).status === 'partial')
+ok('关键人<3 ⇒ 下一步=找齐买家委员会', computePenetration([sk('sourcing', ve)]).nextAction.includes('买家委员会'))
+ok('3 关键人×2 通道 + 供应链+换厂+简报 ⇒ penetrated/100', (() => {
+  const p = computePenetration([c3('sourcing'), c3('production'), c3('founder')], { supplierUnderstood: true, switchingEstimated: true, attackPlanReady: true })
+  return p.status === 'penetrated' && p.score === 100
+})())
+ok('委员会齐但无供应链 ⇒ 下一步=查供应商(海关)', computePenetration([c3('sourcing'), c3('production'), c3('founder')], { attackPlanReady: true }).nextAction.includes('海关'))
+ok('marketing(非决策人)不计入买家委员会', computePenetration([sk('marketing', { ...ve, decision_level: 'influencer' })]).stakeholders === 0)
 
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`)
 process.exit(fail > 0 ? 1 : 0)
