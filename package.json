@@ -16,6 +16,7 @@
     "validate:quote": "npx tsx --env-file=.env.local scripts/validate-quote.ts",
     "validate:conversion": "npx tsx scripts/validate-conversion.ts",
     "validate:contact-intelligence": "npx tsx scripts/validate-contact-intelligence.ts",
+    "validate:intel": "npx tsx scripts/validate-intel.ts",
     "report:contact-coverage": "npx tsx --env-file=.env.local scripts/contact-coverage-report.ts"
   },
   "dependencies": {
