@@ -54,8 +54,24 @@ export class FollowupAgent extends BaseAgent {
       .single()
 
     if (error || !run) return { success: false, error: 'followup_run not found' }
-    if (run.status !== 'scheduled') {
+    // Accept the claimed states only; anything terminal (awaiting_approval/sent/
+    // replied/skipped/done) is already handled — never re-draft it.
+    if (!['scheduled', 'queued'].includes(run.status)) {
       return { success: true, data: { skipped: true, reason: `Already ${run.status}` } }
+    }
+    // MAX FOLLOW-UP CAP: never go past the defined step set (loop backstop).
+    if (run.step > 3) {
+      await supabase.from('followup_runs').update({ status: 'done' }).eq('id', followupRunId)
+      return { success: true, data: { skipped: true, reason: 'max_steps_reached' } }
+    }
+    // DEDUP / IDEMPOTENCY: if a pending draft for this step already exists, stop —
+    // do not generate another (this is what produced 195k duplicates).
+    const { data: existingDraft } = await supabase.from('outreach_logs')
+      .select('id').eq('company_id', run.company_id).eq('status', 'pending_approval')
+      .eq('personalization_data->>step', String(run.step)).limit(1)
+    if (existingDraft?.length) {
+      await supabase.from('followup_runs').update({ status: 'awaiting_approval' }).eq('id', followupRunId)
+      return { success: true, data: { skipped: true, reason: 'draft_already_pending' } }
     }
 
     // 2. Check if company has replied — if so, cancel
@@ -155,9 +171,11 @@ export class FollowupAgent extends BaseAgent {
         riskLevel: 'low',
       })
 
-      // Update followup_run with the new outreach_log id
+      // TERMINALIZE so the run is NEVER re-drafted (the core P0 fix). followup_runs
+      // has no updated_at column — including it here errored, which left status
+      // stuck on 'scheduled' and caused the infinite re-draft loop. Status only.
       await supabase.from('followup_runs')
-        .update({ outreach_log_id: log.id, updated_at: new Date().toISOString() })
+        .update({ status: 'awaiting_approval', outreach_log_id: log.id })
         .eq('id', followupRunId)
     }
 

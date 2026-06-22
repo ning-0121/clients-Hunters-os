@@ -149,13 +149,23 @@ async function enqueueFollowups(): Promise<void> {
   if (!dueRuns || dueRuns.length === 0) return
 
   for (const run of dueRuns) {
-    // Mark as queued (not sent!) to prevent double-processing.
-    // FollowupAgent/SendEmailAgent will update to 'sent' after confirmed delivery.
-    await supabase.from('followup_runs')
-      .update({ status: 'queued', updated_at: new Date().toISOString() })
+    // ATOMIC CLAIM: flip scheduled→queued and confirm WE won the row (.select()).
+    // NOTE: followup_runs has no updated_at column — writing it errors and the
+    // claim silently fails, leaving the run 'scheduled' to be re-drafted forever
+    // (the P0 loop). Do NOT add updated_at here.
+    const { data: claimed, error: claimErr } = await supabase.from('followup_runs')
+      .update({ status: 'queued' })
       .eq('id', run.id).eq('status', 'scheduled')
+      .select('id')
+    if (claimErr) { console.error('[Worker] followup claim failed:', claimErr.message); continue }
+    if (!claimed?.length) continue   // already claimed by another cycle — never double-enqueue
 
-    // Enqueue process_followup job
+    // DEDUP: skip if a job for this run is already in flight.
+    const { data: dup } = await supabase.from('agent_queue')
+      .select('id').eq('job_type', 'process_followup')
+      .contains('payload', { followupRunId: run.id }).in('status', ['waiting', 'active']).limit(1)
+    if (dup?.length) continue
+
     await supabase.from('agent_queue').insert({
       job_type: 'process_followup',
       payload:  { followupRunId: run.id },
