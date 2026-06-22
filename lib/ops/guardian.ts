@@ -54,7 +54,9 @@ export interface GuardianVerdict { ok: boolean; tripped: string[]; metrics: Heal
 export async function checkGuardians(sb: DirectClient): Promise<GuardianVerdict> {
   const m = await systemHealth(sb)
   const tripped: string[] = []
-  if (m.agentQueueSize > GUARDIAN.maxAgentQueue) tripped.push(`Queue Guardian: agent_queue ${m.agentQueueSize} > ${GUARDIAN.maxAgentQueue}`)
+  // Queue Guardian watches the LIVE backlog (waiting/active), not historical/
+  // completed rows — a runaway shows as a growing live backlog.
+  if (m.waitingActive > GUARDIAN.maxAgentQueue) tripped.push(`Queue Guardian: live backlog ${m.waitingActive} > ${GUARDIAN.maxAgentQueue}`)
   if (m.pendingDrafts > GUARDIAN.maxPendingDrafts) tripped.push(`Draft Guardian: pending_approval ${m.pendingDrafts} > ${GUARDIAN.maxPendingDrafts}`)
   if (m.aiDraftsLast24h > GUARDIAN.maxAiDraftsPerDay) tripped.push(`Cost Guardian: AI drafts/24h ${m.aiDraftsLast24h} > ${GUARDIAN.maxAiDraftsPerDay} (~$${m.estCostLast24hUSD})`)
   return { ok: tripped.length === 0, tripped, metrics: m }
