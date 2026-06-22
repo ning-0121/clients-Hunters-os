@@ -17,7 +17,8 @@
     "validate:conversion": "npx tsx scripts/validate-conversion.ts",
     "validate:contact-intelligence": "npx tsx scripts/validate-contact-intelligence.ts",
     "validate:intel": "npx tsx scripts/validate-intel.ts",
-    "report:contact-coverage": "npx tsx --env-file=.env.local scripts/contact-coverage-report.ts"
+    "report:contact-coverage": "npx tsx --env-file=.env.local scripts/contact-coverage-report.ts",
+    "health": "npx tsx --env-file=.env.local scripts/health.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

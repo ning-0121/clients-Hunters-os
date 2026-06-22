@@ -1,4 +1,5 @@
 import { createDirectClient } from '@/lib/supabase/server'
+import { draftQueueHealthy } from '@/lib/ops/guardian'
 import { AgentFactory } from '@/agents/agent-factory'
 import { startJobRun } from '@/lib/jobs/job-runs'
 import { processPendingHandoffs } from '@/lib/metronome/client'
@@ -139,6 +140,12 @@ async function processJob(job: QueueJob): Promise<void> {
 
 async function enqueueFollowups(): Promise<void> {
   const supabase = createDirectClient()
+
+  // GUARDIAN circuit-breaker: if pending drafts / queue are runaway, HALT all
+  // follow-up enqueuing. This would have capped the P0 loop at ~1k instead of 195k.
+  const guard = await draftQueueHealthy(supabase)
+  if (!guard.ok) { console.error('[GUARDIAN] follow-up enqueue HALTED —', guard.reason); return }
+
   const { data: dueRuns } = await supabase
     .from('followup_runs')
     .select('id')
