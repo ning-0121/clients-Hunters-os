@@ -62,6 +62,19 @@ export interface CompanyFacts {
   paymentRiskScore?: number | null        // 0-10 (higher = riskier)
   description?: string | null
   customsEvidence?: boolean               // import/customs records exist
+  customsText?: string | null             // raw customs snippets (origin/supplier evidence)
+  city?: string | null
+  region?: string | null
+  complianceLevel?: string | null         // none | bsci_wrap | sedex_smeta | oeko_grs | ...
+  complianceRequirements?: string[]       // concrete audits/certs required (验厂)
+  complianceBlockers?: string[]           // what blocks first order today
+  currentSuppliers?: string[]             // current_supplier_hints (incumbent suppliers)
+  fundingDetected?: boolean
+  foundedYear?: number | null
+  estimatedAnnualRevenue?: string | null
+  hqAddress?: string | null               // real HQ address (e.g. ImportYeti import records)
+  customsOrigins?: string[]               // ISO origin countries from customs records
+  customsShipments?: number | null        // total import shipments (volume evidence)
 }
 
 export interface ProductMatchItem {
@@ -72,6 +85,7 @@ export interface ProductMatchItem {
 }
 
 export interface BriefContact {
+  id?: string | null
   fullName?: string | null
   title?: string | null
   roleType?: string | null
@@ -80,6 +94,8 @@ export interface BriefContact {
   emailVerified?: boolean | null
   emailSource?: string | null
   emailConfidence?: number | null
+  linkedin?: string | null
+  phone?: string | null
   status?: string | null
 }
 
@@ -142,6 +158,13 @@ export interface ChainRole {
   name?: string | null
   title: string
   note: string
+  // Actual contact method, so the brief is operable (manual outreach) — not just
+  // a name + "可达" label. Populated only when a real contact backs the role.
+  contactId?: string | null
+  email?: string | null
+  linkedin?: string | null
+  phone?: string | null
+  reachable?: boolean
 }
 export interface DecisionChain {
   decisionMaker: ChainRole
@@ -210,9 +233,23 @@ export interface NextAction {
   detail?: string
 }
 
+export interface AccountProfile {
+  location: string                        // city, region, country (what we have)
+  hqAddress: string | null                // null = UNKNOWN (no source yet)
+  chinaOffice: string | null              // null = UNKNOWN (needs discovery)
+  salesChannel: string                    // DTC / wholesale / marketplace ...
+  complianceLabel: string                 // 验厂/合规 bar (human label)
+  complianceRequirements: string[]
+  complianceBlockers: string[]
+  currentSuppliers: string[]              // incumbent suppliers (switching context)
+  customsStatus: string                   // import-records status
+  credit: { band: string; riskScore: number; confidence: number; recommendation: string }
+}
+
 export interface IntelligenceBrief {
   version: number
   generatedAt?: string                    // set by the caller when caching
+  accountProfile: AccountProfile
   executive: ExecutiveDecision
   customerType: CustomerTypeProfile
   purchasingModel: PurchasingModelInference

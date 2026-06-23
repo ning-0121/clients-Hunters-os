@@ -16,7 +16,8 @@
  *
  * CAC is NOT computed in P0 — only a reserved `cac` field is carried through.
  */
-import type { PricingBaseline, FabricComplexity } from '@/lib/quote/pricing-config'
+import type { PricingBaseline, FabricComplexity, FabricMaterial } from '@/lib/quote/pricing-config'
+import { MATERIAL_MULT, PLUS_SIZE_MULT, FABRIC_MATERIAL_LABELS } from '@/lib/quote/pricing-config'
 
 // ── Shared explainable-factor shape (matches lib/credit + lib/intent) ─────────
 export interface QuoteFactor {
@@ -42,6 +43,8 @@ export interface QuoteEngineInput {
   // product / deal
   qty: number
   fabricComplexity: FabricComplexity
+  fabricMaterial?: FabricMaterial | null   // drives fabric COST (锦纶/涤纶/棉/抓绒/无缝)
+  plusSize?: boolean | null                // more fabric + grading → higher cost
 
   // customer signals (all optional — engine degrades gracefully)
   customerTier?: CustomerTier | null
@@ -135,11 +138,29 @@ export interface CompetitionMeta {
   note: string
 }
 
+/** Where the unit cost came from + how much to trust it. Never claims real cost. */
+export interface CostBasis {
+  unitCost: number
+  material: FabricMaterial
+  materialLabel: string
+  materialMult: number
+  plusSize: boolean
+  /** 'low' = system default baseline (estimate), 'high' = owner-confirmed in pricing_config. */
+  confidence: 'low' | 'high'
+  /** Human breakdown of how unitCost was derived. */
+  breakdown: string
+  /** Plain-language source + caveat. */
+  source: string
+}
+
 export interface QuoteStrategy {
   category: PricingBaseline['category']
   categoryLabel: string
   qty: number
   fabricComplexity: FabricComplexity
+  fabricMaterial: FabricMaterial
+  plusSize: boolean
+  costBasis: CostBasis
 
   scores: {
     pricing: ScoreResult
@@ -182,8 +203,30 @@ export const pct = (m: number) => `${(Math.round(m * 1000) / 10).toFixed(1)}%`
 /** money → 2dp number */
 const money = (n: number) => Math.round(n * 100) / 100
 
-const FABRIC_MULT: Record<FabricComplexity, number> = { low: 1.0, medium: 1.1, high: 1.3 }
 const COMPETITION_PENALTY: Record<CompetitionLevel, number> = { extreme: 0.04, strong: 0.025, normal: 0, weak: -0.01 }
+
+/**
+ * Unit cost from EVIDENCE-shaped inputs: category baseline × category complexity
+ * × fabric MATERIAL × plus-size, plus amortized dev cost. Material (锦纶/涤纶/棉/
+ * 抓绒/无缝) is the dominant driver — the old model ignored it. We return the full
+ * breakdown + a confidence so the salesperson can judge usability, and we never
+ * present a default baseline as a confirmed cost.
+ */
+function computeCostBasis(b: PricingBaseline, qty: number, material: FabricMaterial, plusSize: boolean): CostBasis {
+  const mat = MATERIAL_MULT[material]
+  const plus = plusSize ? PLUS_SIZE_MULT : 1
+  const make = b.baseCostIndex * b.complexityFactor * mat * plus
+  const dev = b.devCost / Math.max(qty, 1)
+  const unitCost = money(make + dev)
+  const confidence: 'low' | 'high' = b.needsRealCost ? 'low' : 'high'
+  const breakdown =
+    `基准 $${b.baseCostIndex} × 类目系数 ${b.complexityFactor} × 面料 ${mat}(${FABRIC_MATERIAL_LABELS[material]})` +
+    `${plusSize ? ` × 加大码 ${PLUS_SIZE_MULT}` : ''} = 制造 $${money(make)} + 开发摊销 $${money(dev)}/件（${qty} 件）`
+  const source = confidence === 'high'
+    ? 'pricing_config 已确认真实成本'
+    : '系统默认基准 × 面料系数（估算，未经 pricing_config 核实真实成本）'
+  return { unitCost, material, materialLabel: FABRIC_MATERIAL_LABELS[material], materialMult: mat, plusSize, confidence, breakdown, source }
+}
 
 function revenueScore(s?: string | null): { add: number; note: string } {
   if (!s) return { add: 12, note: '营收未知（中性取值）' }
@@ -361,8 +404,7 @@ function buildMargins(
   }
 }
 
-function buildPrices(b: PricingBaseline, qty: number, fabric: FabricComplexity, m: MarginLadder): PriceLadder {
-  const unitCost = b.baseCostIndex * b.complexityFactor * FABRIC_MULT[fabric] + b.devCost / Math.max(qty, 1)
+function buildPrices(unitCost: number, m: MarginLadder): PriceLadder {
   const at = (margin: number) => money(unitCost / (1 - clamp(margin, 0, 0.95)))
   return {
     unitCost: money(unitCost),
@@ -493,7 +535,10 @@ export function computeQuoteStrategy(input: QuoteEngineInput, baseline: PricingB
   const { margins, isStrategicCustomer, requiresOwnerApproval } = buildMargins(
     baseline, pricing.score, risk.score, winProbability.score, dealValue.score, strategicValue.score, i,
   )
-  const prices = buildPrices(baseline, qty, i.fabricComplexity, margins)
+  const fabricMaterial: FabricMaterial = i.fabricMaterial ?? 'poly_spandex'
+  const plusSize = !!i.plusSize
+  const costBasis = computeCostBasis(baseline, qty, fabricMaterial, plusSize)
+  const prices = buildPrices(costBasis.unitCost, margins)
   const samplePolicy = buildSamplePolicy(i, winProbability.score, risk.score, dealValue.score, isStrategicCustomer)
   const negotiation = buildNegotiation(i, margins, prices, risk.score, winProbability.score, dealValue.score, samplePolicy, baseline.needsRealCost)
 
@@ -510,6 +555,9 @@ export function computeQuoteStrategy(input: QuoteEngineInput, baseline: PricingB
     categoryLabel: baseline.label,
     qty,
     fabricComplexity: i.fabricComplexity,
+    fabricMaterial,
+    plusSize,
+    costBasis,
     scores: { pricing, dealValue, winProbability, risk, strategicValue },
     margins,
     prices,

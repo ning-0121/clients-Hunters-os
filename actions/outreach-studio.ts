@@ -27,8 +27,13 @@ export async function composeOutreachDraft(formData: FormData): Promise<void> {
   const sb = await createServiceClient()
   const { data: company } = await sb.from('companies').select('*').eq('id', companyId).single()
   if (!company) return
-  const { data: contact } = await sb.from('contacts').select('full_name, title')
-    .eq('company_id', companyId).order('contact_priority', { ascending: false }).limit(1).maybeSingle()
+  // Target a specific contact when "推送" from the decision-chain brief; otherwise
+  // default to the top-priority contact.
+  const contactId = (formData.get('contactId') as string)?.trim() || undefined
+  const contactQ = sb.from('contacts').select('id, full_name, title').eq('company_id', companyId)
+  const { data: contact } = contactId
+    ? await contactQ.eq('id', contactId).maybeSingle()
+    : await contactQ.order('contact_priority', { ascending: false }).limit(1).maybeSingle()
 
   const cfg = await getAppConfig()
   const sp = cfg.sellerProfile
@@ -68,7 +73,7 @@ export async function composeOutreachDraft(formData: FormData): Promise<void> {
     .eq('company_id', companyId).eq('status', 'draft').order('created_at', { ascending: false }).limit(1).maybeSingle()
 
   const row = {
-    company_id: companyId, contact_id: undefined as string | undefined,
+    company_id: companyId, contact_id: contact?.id ?? undefined,
     channel: 'email', direction: 'outbound',
     subject: composed.subject, body: composed.body,
     personalization_data: { analysis: composed.analysis, lang, studio: true, feedback: feedback ?? null },

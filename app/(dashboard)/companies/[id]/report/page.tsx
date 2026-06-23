@@ -15,7 +15,7 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? 
 const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
 
 const CONTACT_COLS =
-  'full_name,title,role_type,decision_level,email,email_verified,email_deliverable,email_confidence,email_source,status,contact_priority'
+  'id,full_name,title,role_type,decision_level,email,email_verified,email_deliverable,email_confidence,email_source,linkedin_url,phone,status,contact_priority'
 
 export default async function ReportPage({
   params, searchParams,
@@ -73,7 +73,17 @@ export default async function ReportPage({
       </div>
 
       {/* The brief (decision-first) */}
-      <BriefView brief={brief} />
+      <BriefView brief={brief} companyId={id} />
+
+      {/* Floating CTA: turn the brief into action → development workbench (manual or
+          AI draft → mandatory approval → auto-tracking: reply watch, Day+4 / Day+9 re-touch). */}
+      <Link
+        href={`/companies/${id}/outreach`}
+        className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 px-5 py-3 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 hover:shadow-xl transition-all text-sm font-semibold"
+        title="进入开发工作台：人工 / AI 起草 → 必须确认 → 自动追踪（回信监控 · Day+4 二次 · Day+9 三次）"
+      >
+        🚀 开始开发
+      </Link>
 
       {/* 11. Raw Evidence — last, secondary */}
       <Card>

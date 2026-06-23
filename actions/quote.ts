@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { assessCredit, parseShipments } from '@/lib/credit/assess'
 import { getBdIdentity } from '@/lib/bd/shared'
 import { getAppConfig, salesFocusDirective, OUTREACH_TONE_LABELS } from '@/lib/config'
-import { getPricingBaseline, type QuoteCategory, type FabricComplexity, QUOTE_CATEGORIES } from '@/lib/quote/pricing-config'
+import { getPricingBaseline, type QuoteCategory, type FabricComplexity, type FabricMaterial, QUOTE_CATEGORIES } from '@/lib/quote/pricing-config'
 import { computeQuoteStrategy, type QuoteEngineInput, type QuoteStrategy, type CompetitionLevel, type CompetitionMeta } from '@/lib/quote/engine'
 import { inferCompetition } from '@/lib/quote/competition'
 import { composeQuoteMessage } from '@/lib/quote/message'
@@ -24,7 +24,7 @@ function buildEngineInput(
   contacts: Row[],
   samples: Row[],
   orders: Row[],
-  product: { category: QuoteCategory; qty: number; fabricComplexity: FabricComplexity },
+  product: { category: QuoteCategory; qty: number; fabricComplexity: FabricComplexity; fabricMaterial?: FabricMaterial | null; plusSize?: boolean | null },
   competition: { level: CompetitionLevel | null; isPriceComparing: boolean | null; meta: CompetitionMeta },
 ): QuoteEngineInput {
   // Grounded credit/payment risk — same inputs the customer page uses.
@@ -57,6 +57,8 @@ function buildEngineInput(
   return {
     qty: product.qty,
     fabricComplexity: product.fabricComplexity,
+    fabricMaterial: product.fabricMaterial ?? null,
+    plusSize: product.plusSize ?? null,
     customerTier: (company.customer_tier as QuoteEngineInput['customerTier']) ?? null,
     intentScore: asNum(company.intent_score),
     productMatchScore: asNum(company.product_match_score),
@@ -90,7 +92,7 @@ function buildEngineInput(
  */
 export async function computeQuoteStrategyForCompany(
   companyId: string,
-  product: { category: QuoteCategory; qty: number; fabricComplexity: FabricComplexity; isPriceComparing?: boolean | null; competitionLevel?: CompetitionLevel | null },
+  product: { category: QuoteCategory; qty: number; fabricComplexity: FabricComplexity; fabricMaterial?: FabricMaterial | null; plusSize?: boolean | null; isPriceComparing?: boolean | null; competitionLevel?: CompetitionLevel | null },
 ): Promise<QuoteStrategy | null> {
   const supabase = await createServiceClient()
   const [{ data: company }, { data: score }, { data: contacts }, { data: samples }, { data: orders }] = await Promise.all([
@@ -132,23 +134,26 @@ export async function computeQuoteStrategyForCompany(
   const baseline = await getPricingBaseline(product.category)
   const input = buildEngineInput(
     co, (score as Row) ?? null, (contacts as Row[]) ?? [], (samples as Row[]) ?? [], (orders as Row[]) ?? [],
-    { category: product.category, qty: product.qty, fabricComplexity: product.fabricComplexity },
+    { category: product.category, qty: product.qty, fabricComplexity: product.fabricComplexity, fabricMaterial: product.fabricMaterial ?? null, plusSize: product.plusSize ?? null },
     { level, isPriceComparing, meta },
   )
   return computeQuoteStrategy(input, baseline)
 }
 
-function parseProduct(formData: FormData): { category: QuoteCategory; qty: number; fabricComplexity: FabricComplexity; isPriceComparing: boolean | null; competitionLevel: CompetitionLevel | null } {
+function parseProduct(formData: FormData): { category: QuoteCategory; qty: number; fabricComplexity: FabricComplexity; fabricMaterial: FabricMaterial | null; plusSize: boolean; isPriceComparing: boolean | null; competitionLevel: CompetitionLevel | null } {
   const rawCat = String(formData.get('category') ?? 'leggings')
   const category = (QUOTE_CATEGORIES as string[]).includes(rawCat) ? (rawCat as QuoteCategory) : 'leggings'
   const qty = Math.max(1, Math.round(Number(formData.get('qty')) || 0) || 0) || 100
   const fc = String(formData.get('fabricComplexity') ?? 'medium')
   const fabricComplexity: FabricComplexity = fc === 'low' || fc === 'high' ? fc : 'medium'
+  const fmRaw = String(formData.get('fabricMaterial') ?? '')
+  const fabricMaterial = (['poly_spandex', 'nylon_spandex', 'cotton', 'fleece', 'seamless'].includes(fmRaw) ? fmRaw : null) as FabricMaterial | null
+  const plusSize = formData.get('plusSize') === 'yes'
   const pcRaw = formData.get('isPriceComparing')
   const isPriceComparing = pcRaw === 'yes' ? true : pcRaw === 'no' ? false : null
   const clRaw = String(formData.get('competitionLevel') ?? '')
   const competitionLevel = (['extreme', 'strong', 'normal', 'weak'].includes(clRaw) ? clRaw : null) as CompetitionLevel | null
-  return { category, qty, fabricComplexity, isPriceComparing, competitionLevel }
+  return { category, qty, fabricComplexity, fabricMaterial, plusSize, isPriceComparing, competitionLevel }
 }
 
 /**

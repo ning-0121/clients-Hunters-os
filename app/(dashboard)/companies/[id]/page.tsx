@@ -6,12 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { triggerScoreCompany, triggerEnrichCompany } from '@/actions/companies'
 import { triggerTierCompany } from '@/actions/tiering'
 import { triggerCustomsLookup, saveCustomsNotes } from '@/actions/customs'
+import { triggerImportYetiLookup } from '@/actions/importyeti'
 import { triggerApolloLookup } from '@/actions/apollo'
 import { verifyContactEmails } from '@/actions/email'
 import { flagCompanyData, clearCompanyFlag } from '@/actions/data-quality'
 import { triggerDomesticContactLookup } from '@/actions/domestic-contacts'
 import { triggerIntentScan } from '@/actions/intent'
-import { computeCredibility } from '@/lib/contacts/credibility'
+import { computeCredibility, isReachableTier } from '@/lib/contacts/credibility'
 import { computeIntent, INTENT_BADGE } from '@/lib/intent/intent'
 import { classifyRole, ROLE_LABELS } from '@/lib/contacts/roles'
 import { generateReport, createTaskFromReport } from '@/actions/reports'
@@ -24,10 +25,13 @@ import {
 import { recommendFactoryForCompany } from '@/lib/factory/recommend'
 import { FACTORY_DECISION_LABELS } from '@/lib/factory/matcher'
 import { assessCredit, parseShipments } from '@/lib/credit/assess'
+import { buildBrief } from '@/lib/intel/brief'
+import { companyFactsFromRow, briefContactsFromRows } from '@/lib/intel/inputs'
+import { computeAccess, type AccessContact } from '@/lib/contacts/access'
 import { QuoteStrategyCard } from '@/components/quote/quote-strategy-card'
 import { DealList, type DealRow } from '@/components/conversion/deal-list'
+import { NewDealPopover } from '@/components/conversion/new-deal-popover'
 import { TimelineFeed, type EventRow } from '@/components/conversion/timeline-feed'
-import { createDeal } from '@/actions/deals'
 
 const TIER_STYLES: Record<string, string> = {
   A: 'bg-purple-100 text-purple-800 border-purple-200',
@@ -146,10 +150,31 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
   const ACCOUNT_LABEL: Record<string, string> = { prospect: '潜在客户', active_customer: '活跃客户', key_account: '关键客户', strategic_account: '战略客户' }
   const BAND_LABEL: Record<string, string> = { cold: '❄️ Cold', warm: '🌤️ Warm', hot: '🔥 Hot', champion: '🏆 Champion', dormant: '💤 Dormant', risk: '⚠️ Risk' }
 
+  // Decision brief (pure, cheap) — powers the 10-second overview: who / why / next.
+  const overviewBrief = buildBrief({
+    company: companyFactsFromRow(company),
+    contacts: briefContactsFromRows((contacts ?? []) as Record<string, unknown>[]),
+    access: computeAccess((contacts ?? []) as AccessContact[]),
+    quoteCategories: [],
+    openDeals: openDeals.length,
+  })
+  const SOE_LABEL: Record<string, string> = { strike: '🎯 出手转化', hunt: '🔍 紧急找人', nurture: '🌱 培育', hold: '⏸ 持有', abandon: '🗑 放弃' }
+  const fmtNum = (n?: number | null) => (n == null ? '' : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
+
   const firstContact = contacts?.[0]
   const canSample = ['outreach', 'engaged', 'qualified'].includes(company.status)
   const canOrder  = ['qualified', 'closed_won'].includes(company.status)
   const approvedSample = samples?.find((s) => s.status === 'approved')
+
+  // Reachability gate for the headline grade. `company.grade` measures ICP FIT
+  // only — it says nothing about whether we can contact anyone. An account whose
+  // contacts are all guessed / AI-inferred (no verified or trusted email, no
+  // LinkedIn) cannot be acted on or moved to Reachable, so a great-fit "A" must
+  // not read as actionable. We surface that honestly next to the grade rather
+  // than letting a 95/100 with three undeliverable addresses look like an A.
+  const hasReachableContact = (contacts ?? []).some(
+    (c) => isReachableTier(computeCredibility(c).tier) || !!c.linkedin_url,
+  )
 
   return (
     <div className="p-6 max-w-5xl">
@@ -159,8 +184,19 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-2xl font-bold">{decodeHtml(company.name)}</h1>
             {company.grade && (
-              <span className={`text-sm font-bold px-3 py-1 rounded-full ${GRADE_STYLES[company.grade]}`}>
-                评级 {company.grade}
+              <span
+                className={`text-sm font-bold px-3 py-1 rounded-full ${hasReachableContact ? GRADE_STYLES[company.grade] : 'bg-muted text-muted-foreground'}`}
+                title={hasReachableContact ? undefined : '评级仅反映匹配度（ICP fit），不含可达性 — 当前无可达联系人'}
+              >
+                评级 {company.grade}{!hasReachableContact && '（仅匹配）'}
+              </span>
+            )}
+            {company.grade && !hasReachableContact && (
+              <span
+                className="text-sm font-bold px-3 py-1 rounded-full bg-red-100 text-red-700 border border-red-200"
+                title="联系人均为 AI 推断 / 猜测邮箱，未验证、不可发送。需先用 Apollo / 查国内联系方式补齐并验证关键人邮箱，账户才能进入「可达 Reachable」并推进。"
+              >
+                🔴 不可达 · 待补联系方式
               </span>
             )}
             {company.customer_tier && (
@@ -296,20 +332,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
         </div>
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-semibold text-muted-foreground">机会 Deals</h3>
-          <details className="relative">
-            <summary className="text-xs text-primary cursor-pointer list-none">＋ 新建机会</summary>
-            <form action={createDeal} className="absolute right-0 z-10 mt-1 w-72 border rounded-md bg-card p-3 space-y-2 shadow-lg">
-              <input type="hidden" name="companyId" value={id} />
-              <input name="title" required placeholder="机会标题，如 Leggings 5000pcs" className="w-full px-2 py-1 text-sm border rounded-md bg-background" />
-              <div className="grid grid-cols-2 gap-2">
-                <input name="product_category" placeholder="品类" className="px-2 py-1 text-xs border rounded-md bg-background" />
-                <input name="qty" type="number" placeholder="数量" className="px-2 py-1 text-xs border rounded-md bg-background" />
-                <input name="est_value_usd" type="number" placeholder="预估额 USD" className="px-2 py-1 text-xs border rounded-md bg-background" />
-                <input name="expected_close_date" type="date" className="px-2 py-1 text-xs border rounded-md bg-background" />
-              </div>
-              <button className="w-full text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md">创建机会</button>
-            </form>
-          </details>
+          <NewDealPopover companyId={id} />
         </div>
         <DealList deals={deals} />
       </div>
@@ -454,47 +477,65 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
             </Card>
           )}
 
-          {/* Overview */}
+          {/* Overview — 10-second snapshot: who / why develop / next action */}
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
               <CardTitle className="text-sm">公司概况</CardTitle>
+              <Link href={`/companies/${id}/report`} className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent shrink-0">查看客户简报 →</Link>
             </CardHeader>
             <CardContent className="space-y-3">
-              {company.description && (
-                <p className="text-sm text-muted-foreground">{company.description}</p>
-              )}
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                {company.company_type && (
-                  <div>
-                    <span className="text-muted-foreground">类型：</span>
-                    <span className="capitalize">{company.company_type.replace(/_/g, ' ')}</span>
-                  </div>
-                )}
-                {company.price_point && (
-                  <div>
-                    <span className="text-muted-foreground">价位：</span>
-                    <span className="capitalize">{company.price_point}</span>
-                  </div>
-                )}
-                {company.employee_count_range && (
-                  <div>
-                    <span className="text-muted-foreground">员工数：</span>
-                    <span>{company.employee_count_range}</span>
-                  </div>
-                )}
-                {company.shopify_detected && (
-                  <div>
-                    <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">检测到 Shopify</span>
-                  </div>
-                )}
-              </div>
-              {company.product_categories && company.product_categories.length > 0 && (
-                <div className="flex gap-1.5 flex-wrap">
-                  {company.product_categories.map((cat: string) => (
-                    <Badge key={cat} variant="secondary" className="text-xs capitalize">{cat}</Badge>
-                  ))}
+              {/* WHO — one-line identity */}
+              <p className="text-sm">
+                <b>{decodeHtml(company.name)}</b>
+                {[company.country, company.company_type ? String(company.company_type).replace(/_/g, ' ') : null, company.price_point, company.product_categories?.slice(0, 3).join('/')]
+                  .filter(Boolean).map((x, i) => <span key={i} className="text-muted-foreground"> · {x as string}</span>)}
+              </p>
+              {company.description && <p className="text-sm text-muted-foreground">{company.description}</p>}
+
+              {/* WHY develop */}
+              <div className="rounded-md bg-muted/40 px-3 py-2 text-xs space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold">为什么值得开发</span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{overviewBrief.customerType.label}</span>
+                  {overviewBrief.executive.annualPotentialUsd && (
+                    <span className="text-muted-foreground">年潜力 ~${Math.round(overviewBrief.executive.annualPotentialUsd.low / 1000)}–{Math.round(overviewBrief.executive.annualPotentialUsd.high / 1000)}k</span>
+                  )}
+                  <span className="text-muted-foreground">赢率 {overviewBrief.executive.winProbability}%</span>
                 </div>
-              )}
+                <p className="text-muted-foreground">{score?.score_reasoning || company.tier_reasoning || overviewBrief.winningStrategy.summary}</p>
+              </div>
+
+              {/* NEXT action */}
+              <div className="rounded-md border px-3 py-2 text-xs space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">下一步开发动作</span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-accent">{SOE_LABEL[overviewBrief.resource.action] ?? overviewBrief.resource.action}</span>
+                </div>
+                <ol className="list-decimal pl-4 space-y-0.5 text-muted-foreground">
+                  {overviewBrief.nextActions.slice(0, 3).map((a, i) => <li key={i}>{a.task}{a.detail ? ` — ${a.detail}` : ''}</li>)}
+                </ol>
+                <Link href={`/companies/${id}/outreach`} className="inline-block text-primary hover:underline">→ 开始开发（开发信工作台）</Link>
+              </div>
+
+              {/* FACTS grid */}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                {company.website && <div><span className="text-muted-foreground">官网：</span><a href={company.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{company.domain}</a></div>}
+                {company.country && <div><span className="text-muted-foreground">国家：</span>{company.country}{company.city ? ` · ${company.city}` : ''}</div>}
+                {company.employee_count_range && <div><span className="text-muted-foreground">员工：</span>{company.employee_count_range}</div>}
+                {company.estimated_annual_revenue && <div><span className="text-muted-foreground">营收：</span>{company.estimated_annual_revenue}</div>}
+                {company.founded_year && <div><span className="text-muted-foreground">成立：</span>{company.founded_year}</div>}
+                {(company.instagram_followers || company.tiktok_followers) ? <div><span className="text-muted-foreground">社媒：</span>{company.instagram_followers ? `IG ${fmtNum(company.instagram_followers)}` : ''}{company.tiktok_followers ? `${company.instagram_followers ? ' · ' : ''}TT ${fmtNum(company.tiktok_followers)}` : ''}</div> : null}
+                {company.source && <div><span className="text-muted-foreground">来源：</span>{company.source_url ? <a href={company.source_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{company.source}</a> : company.source}</div>}
+                {company.total_score != null && <div><span className="text-muted-foreground">评分：</span>{Number(company.total_score).toFixed(0)}/100{company.grade ? ` (${company.grade})` : ''}</div>}
+              </div>
+
+              {/* category + shopify tags */}
+              {(company.product_categories?.length || company.shopify_detected) ? (
+                <div className="flex gap-1.5 flex-wrap">
+                  {company.product_categories?.map((cat: string) => <Badge key={cat} variant="secondary" className="text-xs capitalize">{cat}</Badge>)}
+                  {company.shopify_detected && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Shopify</span>}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -798,64 +839,103 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
             </Card>
           )}
 
-          {/* 海关数据 (ImportYeti via Serper) */}
+          {/* 海关数据 (ImportYeti) — modern, evidence-first layout */}
           {(() => {
-            const customs = (company.source_raw as Record<string, unknown> | null)?.customs as
-              { importyetiUrl?: string | null; searchUrl?: string; snippets?: string[]; supplierHints?: string[]; checkedAt?: string } | undefined
+            const sr = (company.source_raw as Record<string, unknown> | null) ?? {}
+            const customs = sr.customs as { snippets?: string[]; checkedAt?: string } | undefined
+            const iy = sr.importYeti as {
+              totalShipments?: number; countryCode?: string; mostRecentShipment?: string; companyUrl?: string
+              originCountries?: string[]; suppliers?: { name: string; countryCode: string; shipments?: number }[]
+              matched?: boolean; confidence?: string; candidateUrl?: string; candidateName?: string
+            } | undefined
+            const hqAddress = sr.hqAddress as string | undefined
+            const ISO_ZH: Record<string, string> = { CN: '中国', VN: '越南', BD: '孟加拉', IN: '印度', KH: '柬埔寨', ID: '印尼', TR: '土耳其', PK: '巴基斯坦', PT: '葡萄牙', LK: '斯里兰卡', TW: '中国台湾', TH: '泰国', MM: '缅甸', HK: '中国香港' }
             const nm = decodeHtml(company.name)
             const isDomestic = company.country === 'China' || company.country === '中国'
               || (typeof company.target_customer_segment === 'string' && company.target_customer_segment.startsWith('domestic'))
               || !!company.domestic_company_type
-            // Google links ALWAYS open (ImportYeti itself is Cloudflare-gated → often "打不开").
             const googleCustoms = isDomestic
               ? `https://www.google.com/search?q=${encodeURIComponent(`"${nm}" 进出口 OR 海关 OR 客户 OR 供应商`)}`
               : `https://www.google.com/search?q=${encodeURIComponent(`site:importyeti.com ${nm}`)}`
-            const importyetiSearch = `https://www.importyeti.com/search?q=${encodeURIComponent(nm)}`
+            const hasData = !!(iy?.totalShipments)
+            const origins = iy?.originCountries ?? []
             return (
               <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">{isDomestic ? '供应链 / 进出口线索' : '海关数据 (ImportYeti)'}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs">
-                  {isDomestic && (
-                    <p className="text-[11px] text-amber-700">该客户为国内公司，ImportYeti 是美国进口数据、通常查不到。下方用 Google 搜进出口/供应链线索更有效。</p>
-                  )}
-                  <div className="flex gap-1.5 flex-wrap">
-                    <form action={triggerCustomsLookup}>
+                <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    {isDomestic ? '供应链 / 进出口线索' : '海关数据'}
+                    {hasData && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">ImportYeti</span>}
+                  </CardTitle>
+                  <div className="flex gap-1.5">
+                    <form action={isDomestic ? triggerCustomsLookup : triggerImportYetiLookup}>
                       <input type="hidden" name="companyId" value={id} />
-                      <button type="submit" className="text-xs px-2.5 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
-                        {customs ? '重新查询' : '查海关数据'}
-                      </button>
+                      <button type="submit" className="text-[11px] px-2.5 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">{iy || customs ? '重新查询' : '查海关数据'}</button>
                     </form>
-                    <a href={googleCustoms} target="_blank" rel="noopener noreferrer"
-                      className="text-xs px-2.5 py-1 border rounded-md hover:bg-accent">Google 搜进出口 ↗</a>
-                    {!isDomestic && (
-                      <a href={customs?.importyetiUrl ?? importyetiSearch} target="_blank" rel="noopener noreferrer"
-                        className="text-xs px-2.5 py-1 border rounded-md hover:bg-accent">ImportYeti ↗</a>
-                    )}
+                    <a href={iy?.companyUrl ?? iy?.candidateUrl ?? googleCustoms} target="_blank" rel="noopener noreferrer" className="text-[11px] px-2.5 py-1 border rounded-md hover:bg-accent">{iy?.companyUrl ? 'ImportYeti ↗' : 'Google ↗'}</a>
                   </div>
-                  {company.current_supplier_hints && company.current_supplier_hints.length > 0 && (
-                    <div>
-                      <span className="text-muted-foreground">疑似现有供应商：</span>
-                      <div className="flex gap-1 flex-wrap mt-1">
-                        {company.current_supplier_hints.map((s: string) => (
-                          <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
-                        ))}
+                </CardHeader>
+                <CardContent className="space-y-3 text-xs">
+                  {isDomestic && <p className="text-[11px] text-amber-700">国内客户 · ImportYeti 是美国进口数据，通常查不到；用 Google 搜进出口/供应链线索更有效。</p>}
+
+                  {hasData ? (
+                    <>
+                      {/* Stat grid */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-md bg-muted/40 px-3 py-2">
+                          <div className="text-[10px] text-muted-foreground">进口票数</div>
+                          <div className="text-lg font-semibold leading-tight">{iy!.totalShipments!.toLocaleString()}</div>
+                        </div>
+                        <div className="rounded-md bg-muted/40 px-3 py-2">
+                          <div className="text-[10px] text-muted-foreground">目的国 · 最近</div>
+                          <div className="text-sm font-medium leading-tight pt-1">{iy!.countryCode ?? '—'}{iy!.mostRecentShipment ? ` · ${iy!.mostRecentShipment}` : ''}</div>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {customs?.snippets && customs.snippets.length > 0 ? (
-                    <ul className="space-y-1 text-muted-foreground border-t pt-2">
-                      {customs.snippets.map((s, i) => <li key={i} className="line-clamp-3">{s}</li>)}
-                    </ul>
+                      {hqAddress && (
+                        <div>
+                          <div className="text-[10px] text-muted-foreground mb-0.5">总部 / 进口地址</div>
+                          <div className="text-xs">{hqAddress}</div>
+                        </div>
+                      )}
+                      {origins.length > 0 && (
+                        <div>
+                          <div className="text-[10px] text-muted-foreground mb-1">原产国（海关记录）</div>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {origins.map((c) => <span key={c} className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{ISO_ZH[c] ?? c}</span>)}
+                          </div>
+                        </div>
+                      )}
+                      {(iy?.suppliers?.length || company.current_supplier_hints?.length) ? (
+                        <div>
+                          <div className="text-[10px] text-muted-foreground mb-1">现供应商</div>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {(iy?.suppliers?.length ? iy.suppliers.map((s) => `${s.name}${s.countryCode ? ` · ${ISO_ZH[s.countryCode] ?? s.countryCode}` : ''}`) : (company.current_supplier_hints ?? [])).map((s: string) => (
+                              <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">现供应商名称未解析（已知原产国如上）。</p>
+                      )}
+                    </>
+                  ) : iy?.confidence === 'low' ? (
+                    <p className="text-[11px] text-amber-700">找到低置信候选「{iy.candidateName}」，但名称不完全匹配，未自动采用 —— <a href={iy.candidateUrl ?? googleCustoms} target="_blank" rel="noopener noreferrer" className="underline">点此人工确认 ↗</a>，确认后可手动记入下方备注。</p>
                   ) : (
-                    <p className="text-muted-foreground">点「查海关数据」用 Serper 搜 ImportYeti 的进出口记录（谁从该公司进口 / 该公司用哪些工厂）。</p>
+                    <p className="text-muted-foreground">点「查海关数据」拉取真实进口记录（HQ 地址 · 走货量 · 原产国 · 供应商）。</p>
+                  )}
+
+                  {/* Raw HS snippets — secondary, collapsed */}
+                  {customs?.snippets && customs.snippets.length > 0 && (
+                    <details className="border-t pt-2">
+                      <summary className="cursor-pointer text-[11px] text-muted-foreground">原始海关条目 ({customs.snippets.length})</summary>
+                      <ul className="space-y-1 text-muted-foreground mt-1">{customs.snippets.map((s, i) => <li key={i} className="line-clamp-3">{s}</li>)}</ul>
+                    </details>
                   )}
                   {customs?.checkedAt && <p className="text-[10px] text-muted-foreground/70">更新于 {new Date(customs.checkedAt).toLocaleString()}</p>}
+
                   <form action={saveCustomsNotes} className="border-t pt-2 space-y-1">
                     <input type="hidden" name="companyId" value={id} />
-                    <textarea name="notes" rows={2} placeholder="海关备注（看完 ImportYeti 手动记录：现供应商、走货量、切入点…）"
-                      defaultValue={(company.source_raw as Record<string, unknown> | null)?.customs_notes as string ?? ''}
+                    <textarea name="notes" rows={2} placeholder="海关备注（手动补充：走货量趋势、真实供应商、切入点…）"
+                      defaultValue={(sr.customs_notes as string) ?? ''}
                       className="w-full text-[11px] px-2 py-1.5 border rounded-md bg-background" />
                     <button type="submit" className="text-[11px] px-2 py-1 border rounded-md hover:bg-accent">保存备注</button>
                   </form>

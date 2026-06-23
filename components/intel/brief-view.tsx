@@ -2,6 +2,7 @@
  * BriefView — renders the Customer Intelligence Brief (decision-first).
  * Server component. Stacked sections; Raw Evidence is rendered by the page, last.
  */
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type {
@@ -45,17 +46,39 @@ function Section({ id, title, children }: { id: string; title: string; children:
     </Card>
   )
 }
-function ChainLine({ role, c }: { role: string; c: ChainRole }) {
+function ChainLine({ role, c, companyId }: { role: string; c: ChainRole; companyId?: string }) {
+  const hasContactMethod = c.status === 'found' && (c.email || c.linkedin || c.phone)
   return (
-    <div className="flex gap-2 text-sm items-baseline">
-      <span className="text-muted-foreground shrink-0 w-20">{role}</span>
-      <span className={`shrink-0 w-14 ${CHAIN[c.status].cls}`}>{CHAIN[c.status].label}</span>
-      <span className="flex-1">{c.name ? <b>{c.name}</b> : null} <span className="text-muted-foreground">{c.title}</span> — {c.note}</span>
+    <div className="flex flex-col gap-0.5 text-sm">
+      <div className="flex gap-2 items-baseline">
+        <span className="text-muted-foreground shrink-0 w-20">{role}</span>
+        <span className={`shrink-0 w-14 ${CHAIN[c.status].cls}`}>{CHAIN[c.status].label}</span>
+        <span className="flex-1">{c.name ? <b>{c.name}</b> : null} <span className="text-muted-foreground">{c.title}</span> — {c.note}</span>
+      </div>
+      {/* Operable contact method + push-to-action — so a BD can act manually
+          straight from the brief instead of only seeing a "可达" label. */}
+      {hasContactMethod ? (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 items-center pl-[88px] text-xs">
+          {c.email && <a href={`mailto:${c.email}`} className="text-blue-600 hover:underline font-mono">✉ {c.email}</a>}
+          {c.linkedin && <a href={c.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">in ↗</a>}
+          {c.phone && <a href={`tel:${c.phone}`} className="text-muted-foreground font-mono hover:underline">☎ {c.phone}</a>}
+          {companyId && (
+            <Link
+              href={`/companies/${companyId}/outreach${c.contactId ? `?contactId=${c.contactId}` : ''}`}
+              className="ml-auto px-2 py-0.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
+            >
+              推送开发信 →
+            </Link>
+          )}
+        </div>
+      ) : c.status === 'found' ? (
+        <div className="pl-[88px] text-xs text-amber-600">⚠ 已找到此人,但无可用联系方式 — 点「用 Apollo 查决策人 / 验证邮箱」补齐后可推送</div>
+      ) : null}
     </div>
   )
 }
 
-export function BriefView({ brief }: { brief: IntelligenceBrief }) {
+export function BriefView({ brief, companyId }: { brief: IntelligenceBrief; companyId?: string }) {
   const e = brief.executive
   const pot = e.annualPotentialUsd ? `$${Math.round(e.annualPotentialUsd.low / 1000)}k–${Math.round(e.annualPotentialUsd.high / 1000)}k/年` : '—'
 
@@ -83,6 +106,18 @@ export function BriefView({ brief }: { brief: IntelligenceBrief }) {
         </CardContent>
       </Card>
 
+      <Section id="profile" title="1. 客户基础 / 合规 / 信用">
+        <Row k="位置" v={brief.accountProfile.location} />
+        <Row k="总部地址" v={brief.accountProfile.hqAddress ?? <span className="text-amber-600">未知 — 待抓取</span>} />
+        <Row k="中国办公室" v={brief.accountProfile.chinaOffice ?? <span className="text-amber-600">未知 — 待排查（中国/亚洲采购办）</span>} />
+        <Row k="销售途径" v={brief.accountProfile.salesChannel} />
+        <Row k="验厂/合规" v={<>{brief.accountProfile.complianceLabel}{brief.accountProfile.complianceRequirements.length ? ` · 要求:${brief.accountProfile.complianceRequirements.join('、')}` : ''}</>} />
+        {brief.accountProfile.complianceBlockers.length > 0 && <Row k="合规阻碍" v={<span className="text-red-600">{brief.accountProfile.complianceBlockers.join('、')}</span>} />}
+        <Row k="现供应商" v={brief.accountProfile.currentSuppliers.length ? brief.accountProfile.currentSuppliers.join('、') : '未知 — 待海关数据'} />
+        <Row k="海关记录" v={brief.accountProfile.customsStatus} />
+        <Row k="信用评级" v={<><b>{brief.accountProfile.credit.band}</b> <span className="text-muted-foreground">· 风险 {brief.accountProfile.credit.riskScore}/10 · 置信 {Math.round(brief.accountProfile.credit.confidence * 100)}% · {brief.accountProfile.credit.recommendation}</span></>} />
+      </Section>
+
       <Section id="type" title="2. 客户类型">
         <Row k="类型" v={<><b>{brief.customerType.label}</b> <span className="text-muted-foreground">(置信 {Math.round(brief.customerType.confidence * 100)}%)</span></>} />
         <Row k="采购行为" v={brief.customerType.buyingBehavior} />
@@ -95,10 +130,10 @@ export function BriefView({ brief }: { brief: IntelligenceBrief }) {
       </Section>
 
       <Section id="chain" title="3. 决策链(找不到也推断)">
-        <ChainLine role="决策人" c={brief.decisionChain.decisionMaker} />
-        <ChainLine role="买手" c={brief.decisionChain.buyer} />
-        <ChainLine role="影响者" c={brief.decisionChain.influencer} />
-        <ChainLine role="守门人" c={brief.decisionChain.gatekeeper} />
+        <ChainLine role="决策人" c={brief.decisionChain.decisionMaker} companyId={companyId} />
+        <ChainLine role="买手" c={brief.decisionChain.buyer} companyId={companyId} />
+        <ChainLine role="影响者" c={brief.decisionChain.influencer} companyId={companyId} />
+        <ChainLine role="守门人" c={brief.decisionChain.gatekeeper} companyId={companyId} />
         <div className="border-t pt-2 space-y-1">
           <Row k="Access" v={`${brief.decisionChain.accessScore}/100 · ${brief.decisionChain.accessCoverage}`} />
           <Row k="缺失角色" v={brief.decisionChain.missingRoles.join('、') || '无'} />
@@ -124,9 +159,11 @@ export function BriefView({ brief }: { brief: IntelligenceBrief }) {
         <Row k="核心品类" v={brief.productFit.coreCategories.join('、')} />
         <Row k="面料推断" v={brief.productFit.fabricTypes.join('、')} />
         <Row k="工艺复杂度" v={CMPLX[brief.productFit.constructionComplexity]} />
-        <Row k="QIMO 契合分" v={<b>{brief.productFit.qimoFitScore}/100</b>} />
+        <Row k="QIMO 契合分" v={brief.productFit.qimoFitScore < 0
+          ? <span className="text-muted-foreground">待确认(缺品类数据)</span>
+          : <b>{brief.productFit.qimoFitScore}/100</b>} />
         <Row k="切入产品" v={brief.productFit.cutInProducts.join('、')} />
-        <Row k="避免产品" v={brief.productFit.productsToAvoid.join('、') || '无'} />
+        <Row k="避免产品" v={brief.productFit.productsToAvoid.join('、') || '无明确禁忌品类'} />
         <Row k="目标 FOB" v={brief.productFit.targetFobRange} />
         <Row k="工厂要求" v={brief.productFit.factoryRequirement} />
         <Row k="货源国" v={brief.productFit.likelySourcingCountry} />

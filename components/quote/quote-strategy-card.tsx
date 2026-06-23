@@ -5,9 +5,11 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { computeQuoteStrategyForCompany, triggerQuoteStrategy } from '@/actions/quote'
 import { pct, type QuoteStrategy, type ScoreResult } from '@/lib/quote/engine'
 import {
-  QUOTE_CATEGORIES, DEFAULT_PRICING, FABRIC_COMPLEXITY_LABELS,
-  type QuoteCategory, type FabricComplexity,
+  QUOTE_CATEGORIES, DEFAULT_PRICING, FABRIC_COMPLEXITY_LABELS, FABRIC_MATERIAL_LABELS,
+  type QuoteCategory, type FabricComplexity, type FabricMaterial,
 } from '@/lib/quote/pricing-config'
+
+const FABRIC_MATERIALS: FabricMaterial[] = ['poly_spandex', 'nylon_spandex', 'cotton', 'fleece', 'seamless']
 import { QuoteMessageBlock } from '@/components/quote/quote-message-block'
 
 const COMPETITION_LABELS: Record<string, string> = { weak: '弱', normal: '一般', strong: '强', extreme: '极端' }
@@ -68,9 +70,12 @@ export async function QuoteStrategyCard({ companyId }: { companyId: string }) {
   const qty = (typeof last?.qty === 'number' && last.qty > 0 ? last.qty : baseline.moq * 20)
   const fabricComplexity = (['low', 'medium', 'high'].includes(String(last?.fabric_complexity))
     ? last!.fabric_complexity : 'medium') as FabricComplexity
+  const fabricMaterial = ((FABRIC_MATERIALS as string[]).includes(String(last?.fabric_material))
+    ? last!.fabric_material : 'poly_spandex') as FabricMaterial
+  const plusSize = last?.plus_size === true
 
   // Live, re-computable recommendation from current customer signals.
-  const strategy = await computeQuoteStrategyForCompany(companyId, { category, qty, fabricComplexity })
+  const strategy = await computeQuoteStrategyForCompany(companyId, { category, qty, fabricComplexity, fabricMaterial, plusSize })
 
   let approvalPending = false
   if (last?.approval_id) {
@@ -148,10 +153,22 @@ export async function QuoteStrategyCard({ companyId }: { companyId: string }) {
             <span className="font-mono font-medium">${p.recommended}/件</span>
             <span className="text-muted-foreground">　区间 </span>
             <span className="font-mono">${p.rangeLow}–${p.rangeHigh}</span>
-            <span className="text-muted-foreground">　(成本基准 ${p.unitCost}/件)</span>
           </div>
-          {strategy.needsRealCost && (
-            <p className="text-[10px] text-amber-700">⚠ 成本为系统默认基准，请在 pricing_config 确认真实成本后再据此报价</p>
+          {/* Cost basis: source + confidence + full breakdown — so it's judgeable, not a black box */}
+          <div className="rounded-md bg-muted/40 px-2 py-1.5 space-y-0.5">
+            <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+              <span className="text-muted-foreground">成本基准</span>
+              <span className="font-mono font-medium">${strategy.costBasis.unitCost}/件</span>
+              <span className={`px-1.5 py-0.5 rounded-full ${strategy.costBasis.confidence === 'high' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
+                {strategy.costBasis.confidence === 'high' ? '成本已核实' : '估算 estimate · 待核实'}
+              </span>
+              <span className="text-muted-foreground">面料 {strategy.costBasis.materialLabel} ×{strategy.costBasis.materialMult}{strategy.plusSize ? ' · 加大码' : ''}</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">{strategy.costBasis.breakdown}</p>
+            <p className="text-[10px] text-muted-foreground">来源：{strategy.costBasis.source}</p>
+          </div>
+          {strategy.costBasis.confidence === 'low' && (
+            <p className="text-[10px] text-amber-700">⚠ 此为<b>估算价</b>（基于面料系数的默认基准）— 真实成本需在 pricing_config 核实后方可对客户报价，勿直接当成交价</p>
           )}
         </div>
 
@@ -227,7 +244,18 @@ export async function QuoteStrategyCard({ companyId }: { companyId: string }) {
             <label className="text-[10px] text-muted-foreground">数量
               <input name="qty" type="number" min={1} defaultValue={qty} className="mt-0.5 w-full text-xs px-2 py-1 border rounded-md bg-background" />
             </label>
-            <label className="text-[10px] text-muted-foreground">面料复杂度
+            <label className="text-[10px] text-muted-foreground">面料材质（影响成本）
+              <select name="fabricMaterial" defaultValue={fabricMaterial} className="mt-0.5 w-full text-xs px-2 py-1 border rounded-md bg-background">
+                {FABRIC_MATERIALS.map((mt) => <option key={mt} value={mt}>{FABRIC_MATERIAL_LABELS[mt]}</option>)}
+              </select>
+            </label>
+            <label className="text-[10px] text-muted-foreground">加大码 Plus
+              <select name="plusSize" defaultValue={plusSize ? 'yes' : ''} className="mt-0.5 w-full text-xs px-2 py-1 border rounded-md bg-background">
+                <option value="">否</option>
+                <option value="yes">是（加大码 +15%）</option>
+              </select>
+            </label>
+            <label className="text-[10px] text-muted-foreground">面料复杂度（生产风险）
               <select name="fabricComplexity" defaultValue={fabricComplexity} className="mt-0.5 w-full text-xs px-2 py-1 border rounded-md bg-background">
                 {(['low', 'medium', 'high'] as FabricComplexity[]).map((c) => <option key={c} value={c}>{FABRIC_COMPLEXITY_LABELS[c]}</option>)}
               </select>

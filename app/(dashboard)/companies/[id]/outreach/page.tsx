@@ -11,14 +11,22 @@ function decodeHtml(s: string): string {
   return (s ?? '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&#\d+;/g, (m) => String.fromCharCode(parseInt(m.slice(2, -1)))).trim()
 }
 
-export default async function OutreachStudioPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function OutreachStudioPage({
+  params, searchParams,
+}: { params: Promise<{ id: string }>; searchParams: Promise<{ contactId?: string }> }) {
   const { id } = await params
+  const { contactId } = await searchParams
   const sb = await createClient()
 
+  // When "推送" from the decision-chain brief, target that specific contact;
+  // otherwise default to the top-priority one.
+  const contactSel = sb.from('contacts').select('full_name, title, email').eq('company_id', id)
   const [{ data: company }, { data: draft }, { data: contact }, { data: pending }] = await Promise.all([
     sb.from('companies').select('id, name, customer_tier, current_supplier_hints, product_match').eq('id', id).single(),
     sb.from('outreach_logs').select('*').eq('company_id', id).eq('status', 'draft').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-    sb.from('contacts').select('full_name, title, email').eq('company_id', id).order('contact_priority', { ascending: false }).limit(1).maybeSingle(),
+    contactId
+      ? contactSel.eq('id', contactId).maybeSingle()
+      : contactSel.order('contact_priority', { ascending: false }).limit(1).maybeSingle(),
     sb.from('outreach_logs').select('id, subject, status, created_at').eq('company_id', id).in('status', ['pending_approval', 'approved', 'sent']).order('created_at', { ascending: false }).limit(5),
   ])
   if (!company) notFound()
@@ -37,12 +45,21 @@ export default async function OutreachStudioPage({ params }: { params: Promise<{
         </p>
       </div>
 
+      {/* Development & tracking plan — what this page does, end to end. */}
+      <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs space-y-1">
+        <p className="font-semibold text-sm">开发与追踪计划</p>
+        <p>① <b>人工</b>编辑下方草稿，或点「{draft ? '按要求重写' : '生成开发信'}」用 <b>AI</b> 起草（可填调整要求）。</p>
+        <p>② 满意后<b>提交审批</b> —— 系统不会自动发送，开发信必须经你确认。</p>
+        <p>③ 审批通过发送后<b>自动启动追踪</b>：回信监控 · Day+4 二次开发 · Day+9 三次开发 · 自动建会话并推进。</p>
+      </div>
+
       {/* Generate / Regenerate */}
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-sm">生成 / 重新生成</CardTitle></CardHeader>
         <CardContent>
           <form action={composeOutreachDraft} className="flex gap-2 items-start">
             <input type="hidden" name="companyId" value={id} />
+            {contactId && <input type="hidden" name="contactId" value={contactId} />}
             <input name="feedback" placeholder="不满意？填调整要求，如：更短 / 强调价格 / 突出无缝产能 / 用中文 / 更正式"
               className="flex-1 text-sm px-3 py-2 border rounded-md bg-background" />
             <button type="submit" className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 whitespace-nowrap">

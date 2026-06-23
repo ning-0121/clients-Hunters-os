@@ -32,11 +32,27 @@ export function companyFactsFromRow(row: Record<string, unknown>): CompanyFacts 
     paymentRiskScore: numOrNull(row.payment_risk_score),
     description: (row.description as string) ?? null,
     customsEvidence: !!sourceRaw.customs,
+    customsText: ((sourceRaw.customs as { snippets?: string[] } | undefined)?.snippets ?? []).join(' | ') || null,
+    city: (row.city as string) ?? null,
+    region: (row.region as string) ?? null,
+    complianceLevel: (row.compliance_level as string) ?? null,
+    complianceRequirements: Array.isArray(row.compliance_requirements) ? (row.compliance_requirements as string[]) : [],
+    complianceBlockers: Array.isArray(row.compliance_blockers) ? (row.compliance_blockers as string[]) : [],
+    currentSuppliers: Array.isArray(row.current_supplier_hints) ? (row.current_supplier_hints as string[]) : [],
+    fundingDetected: !!row.funding_detected,
+    foundedYear: numOrNull(row.founded_year),
+    estimatedAnnualRevenue: (row.estimated_annual_revenue as string) ?? null,
+    hqAddress: (sourceRaw.hqAddress as string) ?? null,
+    customsOrigins: Array.isArray((sourceRaw.importYeti as { originCountries?: string[] } | undefined)?.originCountries)
+      ? ((sourceRaw.importYeti as { originCountries: string[] }).originCountries)
+      : [],
+    customsShipments: numOrNull((sourceRaw.importYeti as { totalShipments?: number } | undefined)?.totalShipments),
   }
 }
 
 export function briefContactsFromRows(rows: Record<string, unknown>[]): BriefContact[] {
   return (rows ?? []).map((r) => ({
+    id: (r.id as string) ?? null,
     fullName: (r.full_name as string) ?? null,
     title: (r.title as string) ?? null,
     roleType: (r.role_type as string) ?? null,
@@ -45,6 +61,8 @@ export function briefContactsFromRows(rows: Record<string, unknown>[]): BriefCon
     emailVerified: (r.email_verified as boolean) ?? null,
     emailSource: (r.email_source as string) ?? null,
     emailConfidence: numOrNull(r.email_confidence),
+    linkedin: (r.linkedin_url as string) ?? null,
+    phone: (r.phone as string) ?? null,
     status: (r.status as string) ?? null,
   }))
 }

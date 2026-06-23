@@ -30,11 +30,17 @@ function pick(contacts: BriefContact[], pred: (c: BriefContact) => boolean): Bri
 }
 
 function found(c: BriefContact, fallbackTitle: string): ChainRole {
+  const reachable = isReachable(c)
   return {
     status: 'found',
     name: c.fullName ?? null,
     title: c.title || fallbackTitle,
-    note: isReachable(c) ? '已找到,可达(verified/trusted)' : '已找到,邮箱待验证',
+    note: reachable ? '已找到,可达(verified/trusted)' : '已找到,邮箱待验证',
+    contactId: c.id ?? null,
+    email: c.email ?? null,
+    linkedin: c.linkedin ?? null,
+    phone: c.phone ?? null,
+    reachable,
   }
 }
 const inferred = (title: string, note: string): ChainRole => ({ status: 'inferred', title, note })

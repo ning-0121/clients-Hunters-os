@@ -14,10 +14,12 @@ import { buildExecutiveDecision } from '@/lib/intel/executive-decision'
 import { buildResourceAllocation } from '@/lib/intel/resource-allocation'
 import { buildRiskAssessment } from '@/lib/intel/risks'
 import { buildNextActions } from '@/lib/intel/next-actions'
+import { buildAccountProfile } from '@/lib/intel/account-profile'
 
 export function buildBrief(inputs: BriefInputs): IntelligenceBrief {
   const { company, contacts, access } = inputs
 
+  const accountProfile = buildAccountProfile(company)
   const customerType = classifyCustomerType(company)
   const purchasingModel = inferPurchasingModel(inputs, customerType.type)
   const productFit = productSupplyFit(company, customerType.type)
@@ -33,6 +35,7 @@ export function buildBrief(inputs: BriefInputs): IntelligenceBrief {
 
   return {
     version: BRIEF_VERSION,
+    accountProfile,
     executive,
     customerType,
     purchasingModel,

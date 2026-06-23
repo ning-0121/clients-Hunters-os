@@ -15,9 +15,36 @@
 import { createDirectClient } from '@/lib/supabase/server'
 
 export type QuoteCategory =
-  | 'leggings' | 'sports_bra' | 'jacket' | 'hoodie' | 'shorts' | 'activewear_set'
+  | 'leggings' | 'flare' | 'sports_bra' | 'jacket' | 'hoodie' | 'shorts' | 'activewear_set'
 
 export type FabricComplexity = 'low' | 'medium' | 'high'
+
+/**
+ * Fabric MATERIAL — the dominant driver of fabric cost. Distinct from
+ * fabricComplexity (which is a production-risk signal). Multipliers are relative
+ * to poly/spandex (the cheapest common performance fabric = 1.0). These are
+ * defensible industry estimates, NOT confirmed costs — see needsRealCost.
+ */
+export type FabricMaterial = 'poly_spandex' | 'nylon_spandex' | 'cotton' | 'fleece' | 'seamless'
+
+export const MATERIAL_MULT: Record<FabricMaterial, number> = {
+  poly_spandex: 1.00,   // 涤纶/氨纶 — baseline, most activewear
+  nylon_spandex: 1.30,  // 锦纶/氨纶 — pricier yarn, premium hand-feel (Nulu-type)
+  cotton: 1.12,         // 棉/有机棉 — organic certified runs higher
+  fleece: 1.22,         // 抓绒/卫衣布 — heavier GSM, more yarn
+  seamless: 1.45,       // 无缝 — seamless knit machine, slower throughput
+}
+
+export const FABRIC_MATERIAL_LABELS: Record<FabricMaterial, string> = {
+  poly_spandex: '涤纶/氨纶 (Poly/Spandex)',
+  nylon_spandex: '锦纶/氨纶 (Nylon/Spandex)',
+  cotton: '棉/有机棉 (Cotton)',
+  fleece: '抓绒/卫衣布 (Fleece)',
+  seamless: '无缝 (Seamless)',
+}
+
+/** Plus-size: more fabric + grading + sometimes reinforced panels. */
+export const PLUS_SIZE_MULT = 1.15
 
 export interface PricingBaseline {
   category: QuoteCategory
@@ -36,6 +63,7 @@ export interface PricingBaseline {
 /** In-code defaults — identical to the seed in migration 010. */
 export const DEFAULT_PRICING: Record<QuoteCategory, PricingBaseline> = {
   leggings:       { category: 'leggings',       label: 'Leggings 瑜伽裤',        baseCostIndex: 4.2,  complexityFactor: 1.0,  devCost: 80,  moq: 50, targetMargin: 0.30, recommendedMargin: 0.24, floorMargin: 0.16, strategicMargin: 0.08, needsRealCost: true },
+  flare:          { category: 'flare',          label: 'Flare 喇叭裤',           baseCostIndex: 4.6,  complexityFactor: 1.05, devCost: 85,  moq: 50, targetMargin: 0.30, recommendedMargin: 0.24, floorMargin: 0.16, strategicMargin: 0.08, needsRealCost: true },
   sports_bra:     { category: 'sports_bra',     label: 'Sports Bra 运动内衣',     baseCostIndex: 3.0,  complexityFactor: 1.1,  devCost: 90,  moq: 50, targetMargin: 0.32, recommendedMargin: 0.26, floorMargin: 0.17, strategicMargin: 0.09, needsRealCost: true },
   jacket:         { category: 'jacket',         label: 'Jacket 外套',            baseCostIndex: 11.0, complexityFactor: 1.3,  devCost: 150, moq: 50, targetMargin: 0.28, recommendedMargin: 0.22, floorMargin: 0.15, strategicMargin: 0.07, needsRealCost: true },
   hoodie:         { category: 'hoodie',         label: 'Hoodie 卫衣',            baseCostIndex: 7.5,  complexityFactor: 1.1,  devCost: 100, moq: 50, targetMargin: 0.30, recommendedMargin: 0.24, floorMargin: 0.16, strategicMargin: 0.08, needsRealCost: true },
