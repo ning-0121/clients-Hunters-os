@@ -42,7 +42,7 @@ const moreNav = [
   { href: '/orders',              label: '订单',      icon: ClipboardList  },
   { href: '/approvals',           label: '审批',      icon: CheckSquare    },
   { href: '/pipeline',            label: '销售漏斗',  icon: TrendingUp     },
-  { href: '/outreach',            label: '开发信',    icon: Send           },
+  { href: '/outreach',            label: '发件箱(已发)', icon: Send         },
   { href: '/contacts',            label: '联系人',    icon: Users          },
   { href: '/tasks',               label: '任务',      icon: ListTodo       },
   { href: '/bd/reports',          label: '报告中心',  icon: FileText       },

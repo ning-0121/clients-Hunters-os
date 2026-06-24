@@ -115,7 +115,10 @@ export default async function ApproveStreamPage() {
 
       {/* ✅ 已发送 — 核对真实发送 */}
       <div className="mt-8">
-        <h2 className="text-sm font-semibold mb-1">✅ 已发送（最近 {sent.length}）</h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-semibold">✅ 已发送（最近 {sent.length}）</h2>
+          <Link href="/outreach" className="text-xs text-primary hover:underline">查看全部 + 回复追踪 →</Link>
+        </div>
         <p className="text-xs text-muted-foreground mb-2">
           批准后落到这里——批准发送不再「点完就消失」。<span className="text-green-700">🟢 已真实发出</span> = 邮件服务返回了真实 message-id；
           <span className="text-amber-700">🟡 模拟</span> = 占位未真正发出（邮件未配置时）。鼠标悬停看 message-id。
