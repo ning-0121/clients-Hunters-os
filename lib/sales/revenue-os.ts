@@ -6,7 +6,7 @@
  *   3) Forecast    — conservative / expected / aggressive 90-day revenue
  * Every output exists only to create, accelerate, or protect a PO.
  */
-import { followUpDue, nextCadenceDay, type FunnelStage } from '@/lib/sales/order-engine'
+import { followUpDue, nextCadenceDay, stageIndex, type FunnelStage } from '@/lib/sales/order-engine'
 
 // ── PO probability by funnel stage (all-time conversion to a PO from here) ────
 export const PO_PROB: Record<FunnelStage, number> = {
@@ -170,6 +170,54 @@ export function detectLeaks(o: Opp): Leak[] {
 
 // ── ③ Future Revenue Forecast (90 days) ───────────────────────────────────────
 export interface Forecast { conservative: number; expected: number; aggressive: number; committed: number; byStage: { stage: FunnelStage; count: number; value: number; expected: number }[] }
+
+// ── ④ Revenue Physics (CEO) — PO = 资产 × 流速 × 转化 − 漏损 ──────────────────
+export interface RevenuePhysics {
+  mass: number              // developable assets (🟢)
+  pipeline: number          // total live opps
+  velocityPct: number       // % of pipeline that is "moving" (owner + action + due)
+  stalled: number           // red-flagged (no owner/action/due) — the brake
+  frictionUsd: number       // leak exposure (un-executed actions)
+  repliesObserved: number   // real replies so far
+  expectedPo90d: number     // Σ P(PO in 90d) — the honest near-term output
+  expectedUsd90d: number
+  target90d: number
+  gap: number               // target − expected (units)
+  topBottleneck: string
+  levers: { label: string; deltaPo: number; note: string }[]
+}
+
+const BENCH = { reply: 0.18, sampleFromReply: 0.45, quoteFromSample: 0.5, poFromQuote: 0.55 }
+
+export function revenuePhysics(opps: Opp[], leaks: Leak[], target90d = 6): RevenuePhysics {
+  const pipeline = opps.length
+  const mass = opps.filter((o) => o.klass === 'develop').length
+  const stalled = opps.filter((o) => redFlags(o).length > 0).length
+  const velocityPct = pipeline ? Math.round(((pipeline - stalled) / pipeline) * 100) : 0
+  const frictionUsd = leaks.reduce((s, l) => s + l.lostOpportunityCost, 0)
+  const repliesObserved = opps.filter((o) => stageIndex(o.stage) >= stageIndex('replied')).length
+  const f = forecast(opps)
+  const expectedPo90d = Math.round(opps.reduce((s, o) => s + PO_PROB_90D[o.stage], 0) * 10) / 10
+  const gap = Math.max(0, Math.round((target90d - expectedPo90d) * 10) / 10)
+
+  // Honest bottleneck: what most limits PO output right now.
+  const notContacted = opps.filter((o) => stageIndex(o.stage) < stageIndex('outreach_sent')).length
+  let topBottleneck: string
+  if (repliesObserved === 0 && stageIndex('outreach_sent') >= 0) topBottleneck = '触达→回复：0 回复（信发得太少/太新，或发送未开）'
+  else if (velocityPct < 50) topBottleneck = `流速：${stalled}/${pipeline} 无人负责/无下一步，资产推不动`
+  else if (mass < target90d * 3) topBottleneck = '可开发资产不足'
+  else topBottleneck = '转化率（回复/样品/报价）'
+
+  // Directional levers (estimates) — what one move adds to 90-day PO.
+  const sent = opps.filter((o) => stageIndex(o.stage) >= stageIndex('outreach_sent') && stageIndex(o.stage) < stageIndex('replied')).length
+  const ready = opps.filter((o) => o.stage === 'contact_captured').length
+  const levers = [
+    { label: `发出/跟进 ${sent + ready} 封 → 按基准回复率拿回复`, deltaPo: Math.round((sent + ready) * BENCH.reply * BENCH.sampleFromReply * BENCH.quoteFromSample * BENCH.poFromQuote * 10) / 10, note: '最快杠杆：先把信发出去拿回复（需开启发送）' },
+    { label: `分派 ${stalled} 个无主/停滞客户 → 提流速`, deltaPo: Math.round(stalled * 0.02 * 10) / 10, note: '清掉刹车，资产才动' },
+    { label: '补可开发资产（更多 🟢）', deltaPo: 0, note: '最后才靠加量，先把现有的转化' },
+  ]
+  return { mass, pipeline, velocityPct, stalled, frictionUsd, repliesObserved, expectedPo90d, expectedUsd90d: f.expected, target90d, gap, topBottleneck, levers }
+}
 
 export function forecast(opps: Opp[]): Forecast {
   let conservative = 0, expected = 0, aggressive = 0, committed = 0

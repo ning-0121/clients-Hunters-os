@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { getBdIdentity } from '@/lib/bd/shared'
 import { assignLeadToMe } from '@/actions/bd'
 import { loadOpps } from '@/lib/sales/load-opps'
-import { moneyRow, detectLeaks, forecast, LEAK_LABEL, redFlags } from '@/lib/sales/revenue-os'
+import { moneyRow, detectLeaks, forecast, revenuePhysics, LEAK_LABEL, redFlags } from '@/lib/sales/revenue-os'
 import { FUNNEL_LABEL as FUNNEL_LABELS, type FunnelStage } from '@/lib/sales/order-engine'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +18,7 @@ export default async function CommandCenterPage() {
   const leaks = opps.flatMap(detectLeaks).sort((a, b) => b.lostOpportunityCost - a.lostOpportunityCost)
   const money = opps.map(moneyRow).sort((a, b) => b.score - a.score)
   const f = forecast(opps)
+  const phys = revenuePhysics(opps, leaks)
   const leakExposure = leaks.reduce((s, l) => s + l.lostOpportunityCost, 0)
   const inStage = (s: FunnelStage) => money.filter((m) => m.o.stage === s)
 
@@ -124,8 +125,29 @@ export default async function CommandCenterPage() {
         </table>
       </Section>
 
-      {/* 3. 📈 Future Revenue Forecast */}
-      <Section title="📈 Future Revenue Forecast (90天)" sub="无需打开任何客户记录" accent="border-blue-300">
+      {/* 3. 📈 CEO · Revenue Physics */}
+      <Section title="📈 CEO · Revenue Physics" sub="PO = 资产 × 流速 × 转化 − 漏损" accent="border-blue-300">
+        <div className="flex flex-wrap gap-x-6 gap-y-1 mb-2">
+          <div><div className="text-muted-foreground">90天目标</div><div className="text-lg font-bold">{phys.target90d} 单</div></div>
+          <div><div className="text-muted-foreground">预期</div><div className="text-lg font-bold text-blue-700">{phys.expectedPo90d} 单</div></div>
+          <div><div className="text-muted-foreground">缺口</div><div className="text-lg font-bold text-red-600">{phys.gap} 单</div></div>
+          <div><div className="text-muted-foreground">已签约</div><div className="text-lg font-bold text-green-700">{usd(f.committed)}</div></div>
+        </div>
+        <div className="rounded-md bg-muted/40 px-3 py-2 mb-2 text-[11px] leading-relaxed">
+          运动方程：资产 <b>{phys.mass}</b> 可开发 × 流速 <b className={phys.velocityPct < 50 ? 'text-red-600' : ''}>{phys.velocityPct}%</b>（{phys.stalled} 停滞/无主）× 转化（回复{phys.repliesObserved} 实测）− 漏损 <b className="text-red-600">{usd(phys.frictionUsd)}</b>
+          <div className="mt-1">▶ 最大瓶颈：<b>{phys.topBottleneck}</b></div>
+        </div>
+        <div className="text-[11px] space-y-0.5">
+          <div className="text-muted-foreground">🎚 调一个杠杆（估算 +PO/90天）：</div>
+          {phys.levers.map((l, i) => (
+            <div key={i} className="flex gap-2"><span className="font-mono text-blue-700 w-10">+{l.deltaPo}</span><span><b>{l.label}</b> — <span className="text-muted-foreground">{l.note}</span></span></div>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground/70 mt-2">转化常数为行业基准（回复18%/样品45%/报价50%/PO55%），实测数据积累后自动校准；目标 {phys.target90d} 单为默认，可改。</p>
+      </Section>
+
+      {/* 3b. 📈 金额预测（保守/预期/激进） */}
+      <Section title="📈 金额预测 (90天)" sub="无需打开任何客户记录" accent="border-blue-200">
         <div className="flex gap-6 mb-2">
           <div><div className="text-muted-foreground">保守</div><div className="text-lg font-bold">{usd(f.conservative)}</div></div>
           <div><div className="text-muted-foreground">预期</div><div className="text-lg font-bold text-blue-700">{usd(f.expected)}</div></div>
