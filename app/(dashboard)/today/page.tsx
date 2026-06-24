@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { createDirectClient } from '@/lib/supabase/server'
 import { loadOpps, loadNeedsContact } from '@/lib/sales/load-opps'
 import { moneyRow, detectLeaks, DEV_CLASS, LEAK_LABEL, redFlags } from '@/lib/sales/revenue-os'
 import { FUNNEL_LABEL } from '@/lib/sales/order-engine'
@@ -8,7 +9,11 @@ const usd = (n: number) => `$${Math.round(n / 1000)}k`
 
 export default async function TodayPage({ searchParams }: { searchParams: Promise<{ stage?: string }> }) {
   const { stage } = await searchParams
-  const [opps, needsContact] = await Promise.all([loadOpps(), loadNeedsContact()])
+  const [opps, needsContact, pendingApprove] = await Promise.all([
+    loadOpps(),
+    loadNeedsContact(),
+    createDirectClient().from('outreach_logs').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval').not('contact_id', 'is', null).then((r) => r.count ?? 0, () => 0),
+  ])
   const allMoney = opps.map(moneyRow).sort((a, b) => b.score - a.score)
   // Action Queue = 🟢 develop only (actionable). 🟡 go to the fill-contact lane.
   const develop = allMoney.filter((m) => m.o.klass === 'develop')
@@ -37,6 +42,12 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
     <div className="p-6 max-w-3xl">
       <h1 className="text-2xl font-bold mb-1">今日行动</h1>
       <p className="text-xs text-muted-foreground mb-3">从上往下做完，就是今天数学上最优的 PO 产出路径。</p>
+      {pendingApprove > 0 && (
+        <Link href="/approve" className="flex items-center justify-between rounded-lg border-2 border-primary/40 bg-primary/5 px-4 py-2.5 mb-3 hover:bg-primary/10">
+          <span className="text-sm font-semibold">📤 {pendingApprove} 封开发信已写好，待你批准发送</span>
+          <span className="text-sm text-primary">批准并发送 →</span>
+        </Link>
+      )}
       {/* 阶段过滤（block 2）：一个地方按漏斗阶段看我的客户，不用跳到回复箱/样品/审批 */}
       <div className="flex flex-wrap gap-1.5 mb-4">
         {STAGE_CHIPS.map((c) => (

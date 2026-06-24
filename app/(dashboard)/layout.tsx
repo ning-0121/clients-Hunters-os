@@ -24,11 +24,12 @@ import {
 
 // 5 primary destinations — organized by salesperson workflow, not by data object.
 const primaryNav = [
-  { href: '/today',           label: '今日行动',  icon: Sun      },
-  { href: '/companies',       label: '我的客户',  icon: Building2 },
-  { href: '/leads/discovery', label: '开发',      icon: Search   },
-  { href: '/command',         label: '看板',      icon: Gauge    },
-  { href: '/settings',        label: '设置',      icon: Settings },
+  { href: '/today',           label: '今日行动',    icon: Sun         },
+  { href: '/approve',         label: '批准发送',    icon: CheckSquare },
+  { href: '/companies',       label: '我的客户',    icon: Building2   },
+  { href: '/leads/discovery', label: '开发',        icon: Search      },
+  { href: '/command',         label: '看板',        icon: Gauge       },
+  { href: '/settings',        label: '设置',        icon: Settings    },
 ]
 
 // Working pages — still reachable, but demoted (become 我的客户的阶段过滤 in V2).
@@ -48,13 +49,13 @@ const moreNav = [
   { href: '/system/workers',      label: '后台进程',  icon: Cpu            },
 ]
 
-// Mobile bottom nav = the 5 primary.
+// Mobile bottom nav — the most-used actions.
 const mobileNav = [
-  { href: '/today',           label: '今日',   icon: Sun      },
-  { href: '/companies',       label: '客户',   icon: Building2 },
-  { href: '/leads/discovery', label: '开发',   icon: Search   },
-  { href: '/command',         label: '看板',   icon: Gauge    },
-  { href: '/settings',        label: '设置',   icon: Settings },
+  { href: '/today',     label: '今日',   icon: Sun         },
+  { href: '/approve',   label: '批准',   icon: CheckSquare },
+  { href: '/companies', label: '客户',   icon: Building2   },
+  { href: '/command',   label: '看板',   icon: Gauge       },
+  { href: '/settings',  label: '设置',   icon: Settings    },
 ]
 
 const navLinkCls =
