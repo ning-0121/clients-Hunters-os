@@ -26,7 +26,7 @@ import {
 const primaryNav = [
   { href: '/today',           label: '今日行动',    icon: Sun         },
   { href: '/approve',         label: '批准发送',    icon: CheckSquare },
-  { href: '/companies',       label: '我的客户',    icon: Building2   },
+  { href: '/assets',          label: '我的客户',    icon: Building2   },
   { href: '/leads/discovery', label: '开发',        icon: Search      },
   { href: '/command',         label: '看板',        icon: Gauge       },
   { href: '/settings',        label: '设置',        icon: Settings    },
@@ -34,6 +34,7 @@ const primaryNav = [
 
 // Working pages — still reachable, but demoted (become 我的客户的阶段过滤 in V2).
 const moreNav = [
+  { href: '/companies',           label: '客户列表',  icon: Building2       },
   { href: '/bd/replies',          label: '回复箱',    icon: Inbox          },
   { href: '/samples',             label: '样品',      icon: Package        },
   { href: '/orders',              label: '订单',      icon: ClipboardList  },
@@ -53,7 +54,7 @@ const moreNav = [
 const mobileNav = [
   { href: '/today',     label: '今日',   icon: Sun         },
   { href: '/approve',   label: '批准',   icon: CheckSquare },
-  { href: '/companies', label: '客户',   icon: Building2   },
+  { href: '/assets',    label: '客户',   icon: Building2   },
   { href: '/command',   label: '看板',   icon: Gauge       },
   { href: '/settings',  label: '设置',   icon: Settings    },
 ]
