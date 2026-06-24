@@ -5,7 +5,7 @@
  * route is publicly readable. Required before binding a public domain.
  *
  *   unauthenticated → /login
- *   authenticated on /login → /bd/today
+ *   authenticated on /login → /today
  */
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -45,7 +45,7 @@ export async function proxy(request: NextRequest) {
   // Logged-in users skip login/register, but /reset must stay reachable
   // (password recovery establishes a temporary session).
   if (user && (pathname === '/login' || pathname === '/register')) {
-    return NextResponse.redirect(new URL('/bd/today', request.url))
+    return NextResponse.redirect(new URL('/today', request.url))
   }
 
   return response

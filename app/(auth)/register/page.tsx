@@ -24,7 +24,7 @@ export default function RegisterPage() {
       const supabase = createClient()
       const { error: signErr } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
       if (signErr) { setError('注册成功，但自动登录失败，请去登录页手动登录'); setLoading(false); return }
-      router.push('/bd/today')
+      router.push('/today')
       router.refresh()
     } catch (err) {
       setError(String(err)); setLoading(false)

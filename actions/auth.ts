@@ -1,6 +1,16 @@
 'use server'
 
-import { createDirectClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { createClient, createDirectClient } from '@/lib/supabase/server'
+
+/** Sign out the current user and bounce to /login (proxy.ts also enforces this). */
+export async function signOut(): Promise<void> {
+  try {
+    const sb = await createClient()
+    await sb.auth.signOut()
+  } catch { /* best-effort — proxy will still redirect unauthenticated */ }
+  redirect('/login')
+}
 
 /**
  * Create a team account, gated by an invite code (SIGNUP_CODE).

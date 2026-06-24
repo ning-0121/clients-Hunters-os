@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { getAppConfig } from '@/lib/config'
+import { getBdIdentity } from '@/lib/bd/shared'
+import { signOut } from '@/actions/auth'
 import { OnboardingGate } from './onboarding-gate'
 import {
   LayoutDashboard,
@@ -64,6 +66,7 @@ const navLinkCls =
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const cfg = await getAppConfig()
+  const { who, authenticated } = await getBdIdentity()
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar — hidden on mobile */}
@@ -91,7 +94,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </div>
           </details>
         </nav>
-        <div className="px-4 py-3 border-t border-sidebar-border">
+        <div className="px-4 py-3 border-t border-sidebar-border space-y-2">
+          {authenticated && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-sidebar-foreground/70 truncate" title={who}>{who}</span>
+              <form action={signOut}>
+                <button className="text-xs text-sidebar-foreground/60 hover:text-white whitespace-nowrap">退出登录</button>
+              </form>
+            </div>
+          )}
           <p className="text-xs text-sidebar-foreground/50">QIMO · 运动服 OEM/ODM</p>
         </div>
       </aside>

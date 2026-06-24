@@ -7,18 +7,33 @@ import { approveAndSend, skipDraft } from '@/actions/sales'
 
 export const dynamic = 'force-dynamic'
 
+const ago = (iso: string | null) => {
+  if (!iso) return '—'
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (m < 1) return '刚刚'
+  if (m < 60) return `${m}分钟前`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}小时前`
+  return `${Math.floor(h / 24)}天前`
+}
+
 /**
  * Execution OS — Approve Stream. Every pre-generated outreach draft is an Execute
  * Card: read the system's writing, then 批准并发送 (one tap) / 改 / 跳过.
  * The human approves; the system already did the work.
+ * 已发送区 lets you verify the send actually went out (real message-id vs sim_).
  */
 export default async function ApproveStreamPage() {
   const sb = await createServiceClient()
-  const [{ data: drafts }, throttle] = await Promise.all([
+  const [{ data: drafts }, { data: sentRows }, throttle] = await Promise.all([
     sb.from('outreach_logs')
       .select('id, company_id, subject, body, contacts(full_name, email, email_verified, email_source, email_confidence), companies(name, source_raw)')
       .eq('status', 'pending_approval').not('contact_id', 'is', null)
       .order('created_at', { ascending: false }).limit(30),
+    sb.from('outreach_logs')
+      .select('id, company_id, subject, sent_at, gmail_message_id, contacts(full_name, email), companies(name, source_raw)')
+      .eq('status', 'sent')
+      .order('sent_at', { ascending: false }).limit(15),
     checkSendThrottle().catch(() => null),
   ])
 
@@ -31,6 +46,19 @@ export default async function ApproveStreamPage() {
       brand: ((co?.source_raw as Record<string, unknown> | null)?.brand as string) || (co?.name as string) || '?',
       contact: (c?.full_name as string) || '(联系人)', email: (c?.email as string) || '',
       verified, subject: (d.subject as string) || '(无主题)', body: (d.body as string) || '',
+    }
+  })
+
+  const sent = (sentRows ?? []).map((d) => {
+    const c = Array.isArray(d.contacts) ? d.contacts[0] : d.contacts
+    const co = Array.isArray(d.companies) ? d.companies[0] : d.companies
+    const mid = (d.gmail_message_id as string) || ''
+    return {
+      id: d.id as string, companyId: d.company_id as string,
+      brand: ((co?.source_raw as Record<string, unknown> | null)?.brand as string) || (co?.name as string) || '?',
+      contact: (c?.full_name as string) || '(联系人)', email: (c?.email as string) || '',
+      subject: (d.subject as string) || '(无主题)', sentAt: (d.sent_at as string) || null,
+      real: mid !== '' && !mid.startsWith('sim_'), messageId: mid,
     }
   })
 
@@ -83,6 +111,30 @@ export default async function ApproveStreamPage() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* ✅ 已发送 — 核对真实发送 */}
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold mb-1">✅ 已发送（最近 {sent.length}）</h2>
+        <p className="text-xs text-muted-foreground mb-2">
+          批准后落到这里——批准发送不再「点完就消失」。<span className="text-green-700">🟢 已真实发出</span> = 邮件服务返回了真实 message-id；
+          <span className="text-amber-700">🟡 模拟</span> = 占位未真正发出（邮件未配置时）。鼠标悬停看 message-id。
+        </p>
+        {sent.length === 0 ? (
+          <p className="text-sm text-muted-foreground">还没有已发送记录。批准一封后会出现在这里。</p>
+        ) : (
+          <div className="rounded-lg border divide-y">
+            {sent.map((s) => (
+              <div key={s.id} className="flex items-center gap-3 px-3 py-2 text-xs" title={s.messageId ? `message-id: ${s.messageId}` : ''}>
+                <span className={`shrink-0 ${s.real ? 'text-green-700' : 'text-amber-700'}`}>{s.real ? '🟢 已真实发出' : '🟡 模拟'}</span>
+                <Link href={`/companies/${s.companyId}`} className="font-medium w-36 truncate hover:underline shrink-0">{s.brand}</Link>
+                <span className="w-52 truncate text-muted-foreground shrink-0">{s.contact}{s.email && ` · ${s.email}`}</span>
+                <span className="flex-1 truncate">{s.subject}</span>
+                <span className="text-muted-foreground shrink-0">{ago(s.sentAt)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
