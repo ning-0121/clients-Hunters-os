@@ -19,7 +19,10 @@
     "validate:intel": "npx tsx scripts/validate-intel.ts",
     "report:contact-coverage": "npx tsx --env-file=.env.local scripts/contact-coverage-report.ts",
     "health": "npx tsx --env-file=.env.local scripts/health.ts",
-    "worklist": "tsx --env-file=.env.local scripts/account-worklist.ts"
+    "worklist": "tsx --env-file=.env.local scripts/account-worklist.ts",
+    "attack": "tsx --env-file=.env.local scripts/order-engine.ts",
+    "replies": "tsx --env-file=.env.local scripts/reply-engine.ts",
+    "revenue": "tsx --env-file=.env.local scripts/revenue-os.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

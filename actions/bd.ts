@@ -20,6 +20,17 @@ export async function assignLeadToMe(formData: FormData): Promise<void> {
   revalidateBd(`/companies/${companyId}`)
 }
 
+/** Remove a lead from MY list (unassign). Only clears it if it's currently mine. */
+export async function removeLeadFromMe(formData: FormData): Promise<void> {
+  const companyId = formData.get('companyId') as string
+  if (!companyId) return
+  const { who } = await getBdIdentity()
+  const sb = await createServiceClient()
+  await sb.from('companies').update({ assigned_to: null, updated_at: new Date().toISOString() })
+    .eq('id', companyId).eq('assigned_to', who)
+  revalidateBd(`/companies/${companyId}`)
+}
+
 /** Assign a lead to a named owner (manager action). */
 export async function assignLeadTo(formData: FormData): Promise<void> {
   const companyId = formData.get('companyId') as string

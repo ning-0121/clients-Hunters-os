@@ -28,6 +28,7 @@ import { assessCredit, parseShipments } from '@/lib/credit/assess'
 import { buildBrief } from '@/lib/intel/brief'
 import { companyFactsFromRow, briefContactsFromRows } from '@/lib/intel/inputs'
 import { computeAccess, type AccessContact } from '@/lib/contacts/access'
+import { devClass, DEV_CLASS, type Potential, type Reachability } from '@/lib/sales/revenue-os'
 import { QuoteStrategyCard } from '@/components/quote/quote-strategy-card'
 import { DealList, type DealRow } from '@/components/conversion/deal-list'
 import { NewDealPopover } from '@/components/conversion/new-deal-popover'
@@ -176,6 +177,14 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
     (c) => isReachableTier(computeCredibility(c).tier) || !!c.linkedin_url,
   )
 
+  // 3-color development class (same vocabulary as 今日行动): 🟢开发 / 🟡补联系人 / ⚫放弃
+  const _sampleProb = ((company.source_raw as Record<string, unknown> | null)?.probs as { sample?: number } | undefined)?.sample ?? 0
+  const _potential: Potential = (company.source_raw as Record<string, unknown> | null)?.qualified === false ? 'P0'
+    : (company.grade === 'A' || _sampleProb >= 70) ? 'P1'
+    : (company.grade === 'B' || _sampleProb >= 40) ? 'P2' : 'P3'
+  const _reachability: Reachability = hasReachableContact ? 'R1' : (contacts?.length ? 'R2' : 'R3')
+  const devKlass = devClass(_potential, _reachability)
+
   return (
     <div className="p-6 max-w-5xl">
       {/* Header */}
@@ -183,6 +192,12 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-2xl font-bold">{decodeHtml(company.name)}</h1>
+            <span
+              className={`text-sm font-bold px-3 py-1 rounded-full ${devKlass === 'develop' ? 'bg-green-100 text-green-800' : devKlass === 'fill_contact' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'}`}
+              title={devKlass === 'develop' ? '可达 + 有价值 → 现在开发' : devKlass === 'fill_contact' ? '有价值但联系不上 → 先补/验证联系人' : '价值低或不匹配 → 放弃'}
+            >
+              {DEV_CLASS[devKlass].dot} {DEV_CLASS[devKlass].label}
+            </span>
             {company.grade && (
               <span
                 className={`text-sm font-bold px-3 py-1 rounded-full ${hasReachableContact ? GRADE_STYLES[company.grade] : 'bg-muted text-muted-foreground'}`}

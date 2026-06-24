@@ -7,7 +7,7 @@ import {
   TASK_TYPE_LABELS, recommendReason, replyGroupOf, REPLY_GROUP_LABELS, REPLY_GROUP_STYLES,
 } from '@/lib/bd/shared'
 import { completeTask, draftReply } from '@/actions/tasks'
-import { snoozeTask, assignLeadToMe, createQuoteTask, createSampleTask, scheduleFollowup, closeReply, rejectLead } from '@/actions/bd'
+import { snoozeTask, assignLeadToMe, removeLeadFromMe, createQuoteTask, createSampleTask, scheduleFollowup, closeReply, rejectLead } from '@/actions/bd'
 import { generateReport } from '@/actions/reports'
 import { flagCompanyData } from '@/actions/data-quality'
 import { computeCredibility, credibilityRank } from '@/lib/contacts/credibility'
@@ -287,7 +287,9 @@ export default async function BdTodayPage() {
                 <Link href={`/companies/${c.id}/report`} className="text-xs px-2 py-1 border rounded-md">看报告</Link>
                 <Link href={`/companies/${c.id}#quote-strategy`} className="text-xs px-2 py-1 border rounded-md">报价策略</Link>
                 <Link href={`/companies/${c.id}/outreach`} className="text-xs px-2 py-1 border rounded-md">生成开发信</Link>
-                {c.assigned_to !== who && <form action={assignLeadToMe}><input type="hidden" name="companyId" value={c.id} /><button className="text-xs px-2 py-1 border rounded-md">分配给我</button></form>}
+                {c.assigned_to !== who
+                  ? <form action={assignLeadToMe}><input type="hidden" name="companyId" value={c.id} /><button className="text-xs px-2 py-1 border rounded-md">分配给我</button></form>
+                  : <form action={removeLeadFromMe}><input type="hidden" name="companyId" value={c.id} /><button className="text-xs px-2 py-1 border rounded-md text-muted-foreground hover:text-red-600">移出我的客户</button></form>}
                 {c.data_flag
                   ? <span className="text-xs px-2 py-1 text-amber-700">⚠ 已报错·重查中</span>
                   : <form action={flagCompanyData}><input type="hidden" name="companyId" value={c.id} /><input type="hidden" name="kind" value="bad_contact" /><button className="text-xs px-2 py-1 border rounded-md text-muted-foreground">报错</button></form>}

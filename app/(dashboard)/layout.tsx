@@ -22,47 +22,43 @@ import {
   Gauge,
 } from 'lucide-react'
 
-const bdItems = [
-  { href: '/bd/today',             label: '今日工作台',  icon: Sun      },
-  { href: '/bd/leads',             label: '客户池',      icon: Search   },
-  { href: '/bd/replies',           label: '回复箱',      icon: Inbox    },
-  { href: '/bd/reports',           label: '报告中心',    icon: FileText },
-  { href: '/manager/bd-dashboard', label: '经理看板',    icon: Gauge    },
+// 5 primary destinations — organized by salesperson workflow, not by data object.
+const primaryNav = [
+  { href: '/today',           label: '今日行动',  icon: Sun      },
+  { href: '/companies',       label: '我的客户',  icon: Building2 },
+  { href: '/leads/discovery', label: '开发',      icon: Search   },
+  { href: '/command',         label: '看板',      icon: Gauge    },
+  { href: '/settings',        label: '设置',      icon: Settings },
 ]
 
-const navItems = [
-  { href: '/dashboard',             label: '总览',       icon: LayoutDashboard },
-  { href: '/tasks',                 label: '任务',       icon: ListTodo        },
-  { href: '/leads',                 label: '线索',       icon: Search          },
-  { href: '/companies',             label: '客户公司',   icon: Building2       },
-  { href: '/contacts',              label: '联系人',     icon: Users           },
-  { href: '/pipeline',              label: '销售漏斗',   icon: TrendingUp      },
-  { href: '/outreach',              label: '开发信',     icon: Send            },
-  { href: '/samples',               label: '样品',       icon: Package         },
-  { href: '/orders',                label: '订单',       icon: ClipboardList   },
-  { href: '/approvals',             label: '审批',       icon: CheckSquare     },
-  { href: '/analytics',             label: '数据分析',   icon: BarChart3       },
-  { href: '/settings',              label: '设置',       icon: Settings        },
+// Working pages — still reachable, but demoted (become 我的客户的阶段过滤 in V2).
+const moreNav = [
+  { href: '/bd/replies',          label: '回复箱',    icon: Inbox          },
+  { href: '/samples',             label: '样品',      icon: Package        },
+  { href: '/orders',              label: '订单',      icon: ClipboardList  },
+  { href: '/approvals',           label: '审批',      icon: CheckSquare    },
+  { href: '/pipeline',            label: '销售漏斗',  icon: TrendingUp     },
+  { href: '/outreach',            label: '开发信',    icon: Send           },
+  { href: '/contacts',            label: '联系人',    icon: Users          },
+  { href: '/tasks',               label: '任务',      icon: ListTodo       },
+  { href: '/bd/reports',          label: '报告中心',  icon: FileText       },
+  { href: '/dashboard',           label: '总览',      icon: LayoutDashboard },
+  { href: '/analytics',           label: '数据分析',  icon: BarChart3      },
+  { href: '/system/email-health', label: '邮件健康',  icon: Heart          },
+  { href: '/system/workers',      label: '后台进程',  icon: Cpu            },
 ]
 
-const systemItems = [
-  { href: '/system/email-health',   label: '邮件健康',   icon: Heart           },
-  { href: '/system/workers',        label: '后台进程',   icon: Cpu             },
-]
-
-// Most-used items for the mobile bottom nav
+// Mobile bottom nav = the 5 primary.
 const mobileNav = [
-  { href: '/bd/today',   label: '今日',   icon: Sun             },
-  { href: '/tasks',      label: '任务',   icon: ListTodo        },
-  { href: '/approvals',  label: '审批',   icon: CheckSquare     },
-  { href: '/samples',    label: '样品',   icon: Package         },
-  { href: '/companies',  label: '客户',   icon: Building2       },
+  { href: '/today',           label: '今日',   icon: Sun      },
+  { href: '/companies',       label: '客户',   icon: Building2 },
+  { href: '/leads/discovery', label: '开发',   icon: Search   },
+  { href: '/command',         label: '看板',   icon: Gauge    },
+  { href: '/settings',        label: '设置',   icon: Settings },
 ]
 
 const navLinkCls =
   'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/80 hover:text-white hover:bg-sidebar-accent transition-colors'
-
-const sectionCls = 'text-[11px] font-medium text-sidebar-foreground/45 uppercase tracking-wider'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const cfg = await getAppConfig()
@@ -75,33 +71,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <p className="text-xs text-sidebar-foreground/60 mt-0.5">QIMO 客户开发系统</p>
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          <div className="pb-1 px-3">
-            <p className={sectionCls}>BD 工作台</p>
-          </div>
-          {bdItems.map(({ href, label, icon: Icon }) => (
+          {primaryNav.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} className={navLinkCls}>
               <Icon className="h-4 w-4 shrink-0" />
               {label}
             </Link>
           ))}
-          <div className="pt-3 pb-1 px-3">
-            <p className={sectionCls}>客户管理</p>
-          </div>
-          {navItems.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} className={navLinkCls}>
-              <Icon className="h-4 w-4 shrink-0" />
-              {label}
-            </Link>
-          ))}
-          <div className="pt-3 pb-1 px-3">
-            <p className={sectionCls}>系统</p>
-          </div>
-          {systemItems.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} className={navLinkCls}>
-              <Icon className="h-4 w-4 shrink-0" />
-              {label}
-            </Link>
-          ))}
+          <details className="pt-3">
+            <summary className={`${navLinkCls} list-none cursor-pointer text-sidebar-foreground/50`}>更多工具 ▾</summary>
+            <div className="space-y-0.5 pt-1">
+              {moreNav.map(({ href, label, icon: Icon }) => (
+                <Link key={href} href={href} className={navLinkCls}>
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </details>
         </nav>
         <div className="px-4 py-3 border-t border-sidebar-border">
           <p className="text-xs text-sidebar-foreground/50">QIMO · 运动服 OEM/ODM</p>
