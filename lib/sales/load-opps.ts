@@ -13,7 +13,7 @@ const DAY = 86_400_000
 export async function loadOpps(): Promise<Opp[]> {
   const sb = createDirectClient()
   const { data: all } = await sb.from('companies')
-    .select('id,name,source_raw,assigned_to,next_action,customer_scale_score,estimated_annual_revenue,price_point')
+    .select('id,name,source_raw,assigned_to,next_action,next_action_due,why_no_reply,customer_scale_score,estimated_annual_revenue,price_point')
     .eq('customer_tier', 'A')
   const base = (all || []).filter((c: any) => c.source_raw?.probs?.sample && c.source_raw?.qualified !== false)
   const ids = base.map((c: any) => c.id)
@@ -36,6 +36,7 @@ export async function loadOpps(): Promise<Opp[]> {
     const contacts = C[c.id] || []
     const flags = roleFlags(contacts)
     const sent = (O[c.id] || []).filter((o) => o.status === 'sent')
+    const lastSentAt = sent.map((o) => o.sent_at).filter(Boolean).sort().slice(-1)[0]
     const repsReal = (R[c.id] || []).filter((r) => !/bounce/i.test(r.reply_intent || ''))
     const replied = repsReal.length > 0
     const sampleRows = S[c.id] || [], quoteRows = Q[c.id] || [], orderRows = OD[c.id] || []
@@ -59,8 +60,10 @@ export async function loadOpps(): Promise<Opp[]> {
       companyId: c.id, brand: (c.source_raw?.brand || c.name || '?').slice(0, 22), stage,
       poValueUsd: estimatePoValue({ customerScaleScore: c.customer_scale_score, estimatedAnnualRevenue: c.estimated_annual_revenue, pricePoint: c.price_point }),
       founder: flags.founder, dmName: (dm as any)?.full_name ?? null, potential, reachability, klass,
-      ownerAssigned: !!c.assigned_to, hasNextAction: !!(c.next_action && String(c.next_action).trim()),
+      ownerAssigned: !!c.assigned_to, owner: (c.assigned_to as string) ?? null, hasNextAction: !!(c.next_action && String(c.next_action).trim()),
+      nextActionDueAt: (c.next_action_due as string) ?? null, whyNoReply: (c.why_no_reply as string) ?? null,
       replyAgeDays: replied ? ageDays(latestReply) : null,
+      outreachSentAgeDays: !replied && lastSentAt ? ageDays(lastSentAt) : null,
       sampleSentAgeDays: sampleRows.length ? ageDays(sampleRows[0].created_at) : null, sampleHasFeedback: false,
       quoteSentAgeDays: quoteRows.length ? ageDays(quoteRows[0].created_at) : null, quoteFollowedUp: false,
       poDiscussionActive: (D[c.id] || []).some((d) => d.status === 'open' && /negotiat|trial/i.test(d.stage || '')),

@@ -7,6 +7,7 @@ import { triggerScoreCompany, triggerEnrichCompany } from '@/actions/companies'
 import { triggerTierCompany } from '@/actions/tiering'
 import { triggerCustomsLookup, saveCustomsNotes } from '@/actions/customs'
 import { triggerImportYetiLookup } from '@/actions/importyeti'
+import { setNextAction, setWhyNoReply } from '@/actions/sales'
 import { triggerApolloLookup } from '@/actions/apollo'
 import { verifyContactEmails } from '@/actions/email'
 import { flagCompanyData, clearCompanyFlag } from '@/actions/data-quality'
@@ -530,6 +531,33 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
                   {overviewBrief.nextActions.slice(0, 3).map((a, i) => <li key={i}>{a.task}{a.detail ? ` — ${a.detail}` : ''}</li>)}
                 </ol>
                 <Link href={`/companies/${id}/outreach`} className="inline-block text-primary hover:underline">→ 开始开发（开发信工作台）</Link>
+
+                {/* V2 纪律：下一步 + 截止（缺则红）+ 为什么没回复（学习闭环） */}
+                <div className="border-t pt-1.5 mt-1 space-y-1">
+                  {(!company.next_action || !company.next_action_due) && (
+                    <p className="text-[11px] text-red-600">🔴 缺{!company.next_action ? '下一步动作' : '截止日'} — 单子会静默烂掉，请补：</p>
+                  )}
+                  <form action={setNextAction} className="flex gap-1.5 items-center">
+                    <input type="hidden" name="companyId" value={id} />
+                    <input name="nextAction" defaultValue={(company.next_action as string) ?? ''} placeholder="下一步动作（如：D+4 发跟进#1）" className="flex-1 text-[11px] px-2 py-1 border rounded bg-background" />
+                    <input name="nextActionDue" type="date" defaultValue={company.next_action_due ? String(company.next_action_due).slice(0, 10) : ''} className="text-[11px] px-2 py-1 border rounded bg-background" />
+                    <button className="text-[11px] px-2 py-1 border rounded hover:bg-accent shrink-0">存</button>
+                  </form>
+                  <form action={setWhyNoReply} className="flex gap-1.5 items-center">
+                    <input type="hidden" name="companyId" value={id} />
+                    <select name="whyNoReply" defaultValue={(company.why_no_reply as string) ?? ''} className="text-[11px] px-2 py-1 border rounded bg-background">
+                      <option value="">为什么没回复…（跟进无果时填）</option>
+                      <option value="wrong_contact">联系人不对</option>
+                      <option value="wrong_wedge">切入点不对</option>
+                      <option value="weak_cta">CTA 太弱</option>
+                      <option value="timing">时机不对</option>
+                      <option value="existing_supplier">已有供应商</option>
+                      <option value="no_need">暂无需求</option>
+                      <option value="unknown">未知</option>
+                    </select>
+                    <button className="text-[11px] px-2 py-1 border rounded hover:bg-accent shrink-0">记录</button>
+                  </form>
+                </div>
               </div>
 
               {/* FACTS grid */}

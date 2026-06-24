@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { getBdIdentity } from '@/lib/bd/shared'
 import { assignLeadToMe } from '@/actions/bd'
 import { loadOpps } from '@/lib/sales/load-opps'
-import { moneyRow, detectLeaks, forecast, LEAK_LABEL } from '@/lib/sales/revenue-os'
+import { moneyRow, detectLeaks, forecast, LEAK_LABEL, redFlags } from '@/lib/sales/revenue-os'
 import { FUNNEL_LABEL as FUNNEL_LABELS, type FunnelStage } from '@/lib/sales/order-engine'
 
 export const dynamic = 'force-dynamic'
@@ -20,6 +20,18 @@ export default async function CommandCenterPage() {
   const f = forecast(opps)
   const leakExposure = leaks.reduce((s, l) => s + l.lostOpportunityCost, 0)
   const inStage = (s: FunnelStage) => money.filter((m) => m.o.stage === s)
+
+  // 谁掉链子 — per-owner health (red flags + leak exposure). 未分配 is the worst leak.
+  type RepHealth = { owner: string; count: number; flags: number; leaks: number; leakUsd: number }
+  const repMap = new Map<string, RepHealth>()
+  for (const o of opps) {
+    const k = o.owner || '未分配'
+    const r = repMap.get(k) ?? { owner: k, count: 0, flags: 0, leaks: 0, leakUsd: 0 }
+    r.count++; if (redFlags(o).length > 0) r.flags++
+    repMap.set(k, r)
+  }
+  for (const l of leaks) { const k = l.o.owner || '未分配'; const r = repMap.get(k); if (r) { r.leaks++; r.leakUsd += l.lostOpportunityCost } }
+  const reps = Array.from(repMap.values()).sort((a, b) => b.leakUsd - a.leakUsd)
 
   const Section = ({ title, sub, accent, children }: { title: string; sub?: string; accent?: string; children: React.ReactNode }) => (
     <section className={`rounded-lg border ${accent ?? ''} mb-4`}>
@@ -75,6 +87,23 @@ export default async function CommandCenterPage() {
             ))}</tbody>
           </table>
         )}
+      </Section>
+
+      {/* 1.5 谁掉链子 — 经理盯人 */}
+      <Section title="🧑‍💼 谁掉链子" sub="按业务员：红旗(缺主/动作/截止) + 漏损敞口" accent="border-red-200">
+        <table className="w-full">
+          <thead><tr className="text-muted-foreground text-left"><th className="font-normal py-1">业务员</th><th className="font-normal">客户</th><th className="font-normal">🔴红旗</th><th className="font-normal">漏点</th><th className="font-normal">漏损$</th></tr></thead>
+          <tbody>{reps.map((r) => (
+            <tr key={r.owner} className="border-t">
+              <td className={`py-1 ${r.owner === '未分配' ? 'text-red-600 font-medium' : ''}`}>{r.owner}</td>
+              <td>{r.count}</td>
+              <td className={r.flags > 0 ? 'text-red-600' : 'text-muted-foreground'}>{r.flags}</td>
+              <td className="text-muted-foreground">{r.leaks}</td>
+              <td className="font-mono text-red-600">{usd(r.leakUsd)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+        <p className="text-[10px] text-muted-foreground mt-1">未分配 = 最大漏损（没人负责必烂）→ 先分派。红旗多 = 该业务员在让单子静默烂掉。</p>
       </Section>
 
       {/* 2. 🔥 Today's Money List */}

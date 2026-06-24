@@ -1,27 +1,51 @@
 import Link from 'next/link'
 import { loadOpps, loadNeedsContact } from '@/lib/sales/load-opps'
-import { moneyRow, detectLeaks, DEV_CLASS, LEAK_LABEL } from '@/lib/sales/revenue-os'
+import { moneyRow, detectLeaks, DEV_CLASS, LEAK_LABEL, redFlags } from '@/lib/sales/revenue-os'
 import { FUNNEL_LABEL } from '@/lib/sales/order-engine'
 
 export const dynamic = 'force-dynamic'
 const usd = (n: number) => `$${Math.round(n / 1000)}k`
 
-export default async function TodayPage() {
+export default async function TodayPage({ searchParams }: { searchParams: Promise<{ stage?: string }> }) {
+  const { stage } = await searchParams
   const [opps, needsContact] = await Promise.all([loadOpps(), loadNeedsContact()])
+  const allMoney = opps.map(moneyRow).sort((a, b) => b.score - a.score)
   // Action Queue = 🟢 develop only (actionable). 🟡 go to the fill-contact lane.
-  const money = opps.map(moneyRow).filter((m) => m.o.klass === 'develop').sort((a, b) => b.score - a.score)
+  const develop = allMoney.filter((m) => m.o.klass === 'develop')
   const leaks = opps.flatMap(detectLeaks).sort((a, b) => b.lostOpportunityCost - a.lostOpportunityCost)
-  const hero = money[0]
-  const queue = money.slice(1, 10)
+  const hero = develop[0]
+  // Stage filter (block 2): browse my accounts by funnel stage in ONE place.
+  const STAGE_FILTER: Record<string, string[]> = { outreach_sent: ['outreach_sent'], replied: ['replied'], sample: ['sample_requested', 'sample_sent'], quotation: ['quotation'], po: ['trial_order', 'scale_order'] }
+  const STAGE_CHIPS: { key: string; label: string }[] = [
+    { key: '', label: '行动队列' }, { key: 'outreach_sent', label: '已触达' }, { key: 'replied', label: '已回复' },
+    { key: 'sample', label: '样品' }, { key: 'quotation', label: '报价' }, { key: 'po', label: 'PO' },
+  ]
+  const stageRows = stage && STAGE_FILTER[stage] ? allMoney.filter((m) => STAGE_FILTER[stage]!.includes(m.o.stage)) : null
+  const queue = stageRows ?? develop.slice(1, 10)
   const dist = { develop: 0, fill_contact: 0, drop: 0 } as Record<string, number>
-  for (const m of money) dist[m.o.klass ?? 'drop']++
+  for (const m of allMoney) dist[m.o.klass ?? 'drop']++
+  // V2 discipline + learning
+  const flaggedCount = opps.filter((o) => redFlags(o).length > 0).length
+  const WHY_ZH: Record<string, string> = { wrong_contact: '联系人不对', wrong_wedge: '切入不对', weak_cta: 'CTA弱', timing: '时机', existing_supplier: '已有供应商', no_need: '无需求', unknown: '未知' }
+  const whyDist: Record<string, number> = {}
+  for (const o of opps) if (o.whyNoReply) whyDist[o.whyNoReply] = (whyDist[o.whyNoReply] || 0) + 1
+  const whyEntries = Object.entries(whyDist).sort((a, b) => b[1] - a[1])
   const urgencyDot = (u: string) => (u === 'hot' ? '🔴' : u === 'soon' ? '🟠' : '🟡')
   const klassChip = (k?: string) => k ? `${DEV_CLASS[k as keyof typeof DEV_CLASS].dot}${DEV_CLASS[k as keyof typeof DEV_CLASS].label}` : ''
 
   return (
     <div className="p-6 max-w-3xl">
       <h1 className="text-2xl font-bold mb-1">今日行动</h1>
-      <p className="text-xs text-muted-foreground mb-4">从上往下做完，就是今天数学上最优的 PO 产出路径。</p>
+      <p className="text-xs text-muted-foreground mb-3">从上往下做完，就是今天数学上最优的 PO 产出路径。</p>
+      {/* 阶段过滤（block 2）：一个地方按漏斗阶段看我的客户，不用跳到回复箱/样品/审批 */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {STAGE_CHIPS.map((c) => (
+          <Link key={c.key} href={c.key ? `/today?stage=${c.key}` : '/today'}
+            className={`text-xs px-2.5 py-1 rounded-full border ${(stage ?? '') === c.key ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'}`}>
+            {c.label}
+          </Link>
+        ))}
+      </div>
 
       {/* ① 现在就做这一件 */}
       {hero ? (
@@ -41,12 +65,14 @@ export default async function TodayPage() {
         </div>
       ) : <p className="text-sm text-muted-foreground mb-5">今日队列为空。</p>}
 
-      {/* ② Action Queue */}
-      <h2 className="text-sm font-semibold mb-2">② 今日队列（按 PO 价值排序）</h2>
+      {/* ② Action Queue / 阶段视图 */}
+      <h2 className="text-sm font-semibold mb-2">
+        {stageRows ? `② ${STAGE_CHIPS.find((c) => c.key === stage)?.label ?? ''}客户（${stageRows.length}）` : '② 今日队列（按 PO 价值排序）'}
+      </h2>
       <div className="rounded-lg border mb-5 divide-y">
         {queue.map((m) => (
           <Link key={m.o.companyId} href={`/companies/${m.o.companyId}`} className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent/40">
-            <span className="w-12 shrink-0">{urgencyDot(m.urgency)}{klassChip(m.o.klass).slice(0, 2)}</span>
+            <span className="w-12 shrink-0">{urgencyDot(m.urgency)}{redFlags(m.o).length > 0 ? '🔴' : klassChip(m.o.klass).slice(0, 2)}</span>
             <span className="font-medium w-40 truncate">{m.o.brand}</span>
             <span className="text-muted-foreground w-16 shrink-0">{usd(m.value)}</span>
             <span className="text-muted-foreground w-20 shrink-0">{FUNNEL_LABEL[m.o.stage]}</span>
@@ -86,7 +112,19 @@ export default async function TodayPage() {
         </>
       )}
 
-      {/* ⑤ 分级分布（假 A 级已被杀死的证据） */}
+      {/* ⑤ 纪律 + 学习（V2） */}
+      <div className="rounded-lg border px-3 py-2 mb-3 text-xs space-y-1">
+        <div>
+          <span className={flaggedCount > 0 ? 'text-red-600 font-medium' : 'text-green-700'}>
+            🔴 纪律：{flaggedCount} 个客户缺「负责人/下一步/截止」</span>
+          <span className="text-muted-foreground ml-1">（点进去补齐，单子才不会静默烂掉）</span>
+        </div>
+        {whyEntries.length > 0 && (
+          <div className="text-muted-foreground">🧠 没回复原因累积：{whyEntries.map(([k, v]) => `${WHY_ZH[k] ?? k} ${v}`).join(' · ')}（拿来改 wedge/CTA）</div>
+        )}
+      </div>
+
+      {/* ⑥ 分级分布（假 A 级已被杀死的证据） */}
       <div className="text-xs text-muted-foreground">
         🟢开发 {dist.develop} · 🟡补联系人 {needsContact.length} · ⚫放弃 {dist.drop}
         <span className="ml-2">（业务员只做 🟢；🟡 先找人；⚫ 不碰——高价值但联系不上的不再冒充 A 级占用时间）</span>

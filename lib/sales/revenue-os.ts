@@ -6,7 +6,7 @@
  *   3) Forecast    — conservative / expected / aggressive 90-day revenue
  * Every output exists only to create, accelerate, or protect a PO.
  */
-import type { FunnelStage } from '@/lib/sales/order-engine'
+import { followUpDue, nextCadenceDay, type FunnelStage } from '@/lib/sales/order-engine'
 
 // ── PO probability by funnel stage (all-time conversion to a PO from here) ────
 export const PO_PROB: Record<FunnelStage, number> = {
@@ -45,9 +45,13 @@ export interface Opp {
   reachability?: Reachability
   klass?: DevClass                // 🟢开发 / 🟡补联系人 / ⚫放弃
   ownerAssigned: boolean
+  owner?: string | null             // assigned salesperson (for manager rep-health)
   hasNextAction: boolean
+  nextActionDueAt?: string | null   // V2: manual due date (null = no due → red)
+  whyNoReply?: string | null        // V2: recorded reason a lead went silent
   // time signals (days; null = n/a)
   replyAgeDays: number | null     // age of an unanswered inbound reply
+  outreachSentAgeDays?: number | null  // days since last outreach (drives follow-up cadence)
   sampleSentAgeDays: number | null
   sampleHasFeedback: boolean
   quoteSentAgeDays: number | null
@@ -83,6 +87,8 @@ export function timeSensitivity(o: Opp): number {
   else if (o.replyAgeDays != null) t = Math.max(t, 1.4)                          // fresh reply, act today
   if (o.quoteSentAgeDays != null && !o.quoteFollowedUp) t = Math.max(t, o.quoteSentAgeDays >= 14 ? 1.5 : o.quoteSentAgeDays >= 7 ? 1.4 : 1.2)
   if (o.sampleSentAgeDays != null && !o.sampleHasFeedback && o.sampleSentAgeDays >= 3) t = Math.max(t, o.sampleSentAgeDays >= 7 ? 1.4 : 1.3)
+  // A follow-up coming due (Day 4/9/15/30) is a reply-rate lever → push it up.
+  if (o.stage === 'outreach_sent' && o.outreachSentAgeDays != null && followUpDue(o.outreachSentAgeDays)) t = Math.max(t, 1.4)
   return t
 }
 
@@ -101,6 +107,10 @@ function reasonFor(o: Opp): string {
   if (o.replyAgeDays != null) return o.replyAgeDays >= 1 ? `${o.founder ? '创始人' : '对方'}回复 ${o.replyAgeDays} 天未处理` : `${o.founder ? '创始人' : '对方'}今天回复`
   if (o.quoteSentAgeDays != null && !o.quoteFollowedUp) return `报价已发 ${o.quoteSentAgeDays} 天无跟进`
   if (o.sampleSentAgeDays != null && !o.sampleHasFeedback) return `样品已寄 ${o.sampleSentAgeDays} 天无反馈`
+  if (o.stage === 'outreach_sent' && o.outreachSentAgeDays != null) {
+    const due = followUpDue(o.outreachSentAgeDays)
+    return due ? `${due.label}到期（发信 ${o.outreachSentAgeDays} 天无回复）` : `已发信 ${o.outreachSentAgeDays} 天，等回复`
+  }
   if (o.stage === 'quotation') return '报价中'
   if (o.stage === 'sample_sent') return '样品已寄'
   if (o.stage === 'replied') return '已回复'
@@ -114,18 +124,32 @@ export function recommendedAction(o: Opp): string {
   if (o.sampleSentAgeDays != null && !o.sampleHasFeedback) return '催样品反馈 → 推报价'
   if (o.stage === 'sample_requested') return '确认地址 + 寄样'
   if (o.stage === 'replied') return '24h 内回复 → 提样品'
+  if (o.stage === 'outreach_sent' && o.outreachSentAgeDays != null) {
+    const due = followUpDue(o.outreachSentAgeDays)
+    const next = nextCadenceDay(o.outreachSentAgeDays)
+    return due ? `发${due.label}（距上次 ${o.outreachSentAgeDays} 天）— 再提样品 offer` : `等回复（下次跟进 Day ${next ?? '—'}）`
+  }
   if (o.stage === 'contact_captured') return '发样品邀约开发信'
   return '推进下一步'
 }
 
 // ── ② Revenue Leak Center ─────────────────────────────────────────────────────
-export type LeakType = 'reply_unanswered' | 'sample_no_feedback' | 'quote_silent' | 'missing_owner' | 'missing_next_action'
+export type LeakType = 'reply_unanswered' | 'sample_no_feedback' | 'quote_silent' | 'missing_owner' | 'missing_next_action' | 'missing_due'
 export const LEAK_LABEL: Record<LeakType, string> = {
   reply_unanswered: '回复 >24h 未处理', sample_no_feedback: '寄样 >7天 无反馈', quote_silent: '报价 >14天 无跟进',
-  missing_owner: '无负责人', missing_next_action: '无下一步动作',
+  missing_owner: '无负责人', missing_next_action: '无下一步动作', missing_due: '下一步无截止日',
 }
 const RISK_OF_LOSS: Record<LeakType, number> = {
-  reply_unanswered: 0.5, sample_no_feedback: 0.4, quote_silent: 0.45, missing_owner: 0.6, missing_next_action: 0.4,
+  reply_unanswered: 0.5, sample_no_feedback: 0.4, quote_silent: 0.45, missing_owner: 0.6, missing_next_action: 0.4, missing_due: 0.3,
+}
+
+/** Discipline (V2): which of owner / next-action / due is missing → red. */
+export function redFlags(o: Opp): string[] {
+  const f: string[] = []
+  if (!o.ownerAssigned) f.push('无负责人')
+  if (!o.hasNextAction) f.push('无下一步')
+  else if (!o.nextActionDueAt) f.push('无截止')
+  return f
 }
 
 export interface Leak { o: Opp; type: LeakType; daysStalled: number | null; riskOfLoss: number; lostOpportunityCost: number; recovery: string }
@@ -140,6 +164,7 @@ export function detectLeaks(o: Opp): Leak[] {
   if (o.quoteSentAgeDays != null && !o.quoteFollowedUp && o.quoteSentAgeDays >= 14) add('quote_silent', o.quoteSentAgeDays, '跟进报价 / 给台阶 / 报备老板')
   if (!o.ownerAssigned) add('missing_owner', null, '立即指派负责人')
   if (!o.hasNextAction) add('missing_next_action', null, '设置下一步动作 + 截止日')
+  else if (!o.nextActionDueAt) add('missing_due', null, '给下一步动作设一个截止日')
   return out
 }
 
