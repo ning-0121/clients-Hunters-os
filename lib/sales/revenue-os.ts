@@ -41,6 +41,9 @@ export interface Opp {
   poValueUsd: number              // estimated order value
   founder: boolean                // a founder/DM is engaged
   dmName?: string | null          // who to contact (best reachable DM)
+  dmContactId?: string | null     // contact row id (to execute the send)
+  dmRole?: string | null          // DM role/title (for ActionCard.contact.role)
+  dmEmail?: string | null         // DM email (reachability display)
   potential?: Potential
   reachability?: Reachability
   klass?: DevClass                // 🟢开发 / 🟡补联系人 / ⚫放弃

@@ -19,7 +19,7 @@ export async function loadOpps(): Promise<Opp[]> {
   const ids = base.map((c: any) => c.id)
   if (!ids.length) return []
   const [cts, outs, reps, samp, quo, ords, deals] = await Promise.all([
-    sb.from('contacts').select('company_id,full_name,title,role_type,email,email_verified,email_source,email_confidence,linkedin_url').in('company_id', ids),
+    sb.from('contacts').select('company_id,id,full_name,title,role_type,email,email_verified,email_source,email_confidence,linkedin_url').in('company_id', ids),
     sb.from('outreach_logs').select('company_id,status,sent_at,replied_at,reply_intent').in('company_id', ids),
     sb.from('reply_events').select('company_id,reply_intent,received_at').in('company_id', ids),
     sb.from('samples').select('company_id,status,created_at').in('company_id', ids).then((r) => r, () => ({ data: [] as any[] })),
@@ -59,7 +59,9 @@ export async function loadOpps(): Promise<Opp[]> {
     return {
       companyId: c.id, brand: (c.source_raw?.brand || c.name || '?').slice(0, 22), stage,
       poValueUsd: estimatePoValue({ customerScaleScore: c.customer_scale_score, estimatedAnnualRevenue: c.estimated_annual_revenue, pricePoint: c.price_point }),
-      founder: flags.founder, dmName: (dm as any)?.full_name ?? null, potential, reachability, klass,
+      founder: flags.founder, dmName: (dm as any)?.full_name ?? null,
+      dmContactId: (dm as any)?.id ?? null, dmRole: (dm as any)?.role_type ?? (dm as any)?.title ?? null, dmEmail: (dm as any)?.email ?? null,
+      potential, reachability, klass,
       ownerAssigned: !!c.assigned_to, owner: (c.assigned_to as string) ?? null, hasNextAction: !!(c.next_action && String(c.next_action).trim()),
       nextActionDueAt: (c.next_action_due as string) ?? null, whyNoReply: (c.why_no_reply as string) ?? null,
       replyAgeDays: replied ? ageDays(latestReply) : null,

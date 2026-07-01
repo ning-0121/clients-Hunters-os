@@ -1,145 +1,104 @@
 import Link from 'next/link'
-import { createDirectClient } from '@/lib/supabase/server'
-import { loadOpps, loadNeedsContact } from '@/lib/sales/load-opps'
-import { moneyRow, detectLeaks, DEV_CLASS, LEAK_LABEL, redFlags } from '@/lib/sales/revenue-os'
-import { FUNNEL_LABEL } from '@/lib/sales/order-engine'
+import { loadActionStream } from '@/lib/sales/load-action-stream'
+import { isGmailConfigured } from '@/lib/email/gmail'
+import { bulkApproveLowRisk } from '@/actions/action-stream'
+import { ActionCardView } from './action-card'
 
 export const dynamic = 'force-dynamic'
-const usd = (n: number) => `$${Math.round(n / 1000)}k`
 
-export default async function TodayPage({ searchParams }: { searchParams: Promise<{ stage?: string }> }) {
-  const { stage } = await searchParams
-  const [opps, needsContact, pendingApprove] = await Promise.all([
-    loadOpps(),
-    loadNeedsContact(),
-    createDirectClient().from('outreach_logs').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval').not('contact_id', 'is', null).then((r) => r.count ?? 0, () => 0),
-  ])
-  const allMoney = opps.map(moneyRow).sort((a, b) => b.score - a.score)
-  // Action Queue = 🟢 develop only (actionable). 🟡 go to the fill-contact lane.
-  const develop = allMoney.filter((m) => m.o.klass === 'develop')
-  const leaks = opps.flatMap(detectLeaks).sort((a, b) => b.lostOpportunityCost - a.lostOpportunityCost)
-  const hero = develop[0]
-  // Stage filter (block 2): browse my accounts by funnel stage in ONE place.
-  const STAGE_FILTER: Record<string, string[]> = { outreach_sent: ['outreach_sent'], replied: ['replied'], sample: ['sample_requested', 'sample_sent'], quotation: ['quotation'], po: ['trial_order', 'scale_order'] }
-  const STAGE_CHIPS: { key: string; label: string }[] = [
-    { key: '', label: '行动队列' }, { key: 'outreach_sent', label: '已触达' }, { key: 'replied', label: '已回复' },
-    { key: 'sample', label: '样品' }, { key: 'quotation', label: '报价' }, { key: 'po', label: 'PO' },
-  ]
-  const stageRows = stage && STAGE_FILTER[stage] ? allMoney.filter((m) => STAGE_FILTER[stage]!.includes(m.o.stage)) : null
-  const queue = stageRows ?? develop.slice(1, 10)
-  const dist = { develop: 0, fill_contact: 0, drop: 0 } as Record<string, number>
-  for (const m of allMoney) dist[m.o.klass ?? 'drop']++
-  // V2 discipline + learning
-  const flaggedCount = opps.filter((o) => redFlags(o).length > 0).length
-  const WHY_ZH: Record<string, string> = { wrong_contact: '联系人不对', wrong_wedge: '切入不对', weak_cta: 'CTA弱', timing: '时机', existing_supplier: '已有供应商', no_need: '无需求', unknown: '未知' }
-  const whyDist: Record<string, number> = {}
-  for (const o of opps) if (o.whyNoReply) whyDist[o.whyNoReply] = (whyDist[o.whyNoReply] || 0) + 1
-  const whyEntries = Object.entries(whyDist).sort((a, b) => b[1] - a[1])
-  const urgencyDot = (u: string) => (u === 'hot' ? '🔴' : u === 'soon' ? '🟠' : '🟡')
-  const klassChip = (k?: string) => k ? `${DEV_CLASS[k as keyof typeof DEV_CLASS].dot}${DEV_CLASS[k as keyof typeof DEV_CLASS].label}` : ''
+/**
+ * /today — Execution OS Action Stream. The user sees ONLY actions to approve:
+ * one PO_SCORE-ranked stream of executable Action Cards. No CRM, no dashboard,
+ * no charts. Everything is Action → Approve → Outcome → Next Action.
+ */
+export default async function TodayPage() {
+  const { stream, lowRisk, stuck, blocked, total } = await loadActionStream()
+  const emailConfigured = isGmailConfigured()
 
   return (
-    <div className="p-6 max-w-3xl">
-      <h1 className="text-2xl font-bold mb-1">今日行动</h1>
-      <p className="text-xs text-muted-foreground mb-3">从上往下做完，就是今天数学上最优的 PO 产出路径。</p>
-      {pendingApprove > 0 && (
-        <Link href="/approve" className="flex items-center justify-between rounded-lg border-2 border-primary/40 bg-primary/5 px-4 py-2.5 mb-3 hover:bg-primary/10">
-          <span className="text-sm font-semibold">📤 {pendingApprove} 封开发信已写好，待你批准发送</span>
-          <span className="text-sm text-primary">批准并发送 →</span>
-        </Link>
-      )}
-      {/* 阶段过滤（block 2）：一个地方按漏斗阶段看我的客户，不用跳到回复箱/样品/审批 */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {STAGE_CHIPS.map((c) => (
-          <Link key={c.key} href={c.key ? `/today?stage=${c.key}` : '/today'}
-            className={`text-xs px-2.5 py-1 rounded-full border ${(stage ?? '') === c.key ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'}`}>
-            {c.label}
-          </Link>
-        ))}
-      </div>
+    <div className="p-6 max-w-2xl">
+      <h1 className="text-2xl font-bold mb-1">今日行动流</h1>
+      <p className="text-xs text-muted-foreground mb-4">从上往下批准发送 —— 这就是数学上最优的 PO 产出顺序。你只审批，不写字。</p>
 
-      {/* ① 现在就做这一件 */}
-      {hero ? (
-        <div className="rounded-lg border-2 border-amber-300 mb-5">
-          <div className="px-4 py-2 bg-amber-50 text-xs font-semibold flex items-center justify-between">
-            <span>① 现在就做这一件 · 全系统最高价值</span>
-            <span>{urgencyDot(hero.urgency)} {usd(hero.value)} · {klassChip(hero.o.klass)}</span>
-          </div>
-          <div className="p-4 space-y-1.5 text-sm">
-            <div><span className="text-muted-foreground w-16 inline-block">联系谁</span><b>{hero.o.dmName || '（待补联系人）'}</b> · {hero.o.brand}</div>
-            <div><span className="text-muted-foreground w-16 inline-block">为什么</span>{hero.reason} · 预期PO {usd(hero.value)} · 赢率 {Math.round(hero.prob * 100)}%</div>
-            <div><span className="text-muted-foreground w-16 inline-block">动作</span><b>{hero.action}</b></div>
-            <div className="pt-1">
-              <Link href={`/companies/${hero.o.companyId}`} className="inline-block px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm hover:bg-primary/90">去执行 →</Link>
+      {!emailConfigured && (
+        <div className="rounded-md border-2 border-red-300 bg-red-50 px-4 py-2.5 mb-4 text-sm text-red-800">
+          🔴 邮件未配置 —— 发送已禁用，不会假发送。在 Vercel 生产环境填入 GMAIL/SMTP 后即可一键发送。
+        </div>
+      )}
+
+      {/* ── PRIMARY: one ranked Action Stream ── */}
+      {stream.length === 0 ? (
+        <div className="rounded-lg border px-4 py-10 text-center text-sm text-muted-foreground">
+          没有可执行的行动卡。
+          {blocked.length > 0 && <> {blocked.length} 个账户缺可达联系人 —— 见下方「缺联系人」。</>}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {stream.map((c) => (
+            <ActionCardView key={c.accountId} card={c} emailConfigured={emailConfigured} />
+          ))}
+        </div>
+      )}
+
+      {/* ── SECONDARY collapsed lanes ── */}
+      <div className="mt-6 space-y-2">
+        {/* Low Risk Bulk Approve */}
+        {lowRisk.length > 0 && (
+          <details className="rounded-lg border">
+            <summary className="px-4 py-2.5 text-sm font-medium cursor-pointer flex items-center justify-between">
+              <span>🟢 低风险批量批准（{lowRisk.length}）—— 邮箱已验证，可一键发</span>
+            </summary>
+            <div className="p-3 border-t space-y-2">
+              <form action={bulkApproveLowRisk}>
+                <button
+                  disabled={!emailConfigured}
+                  className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-semibold hover:bg-green-700 disabled:opacity-40"
+                >
+                  ✅ 全部批准并发送（{lowRisk.length} 封）
+                </button>
+                {!emailConfigured && <span className="text-[11px] text-red-600 ml-2">邮件未配置</span>}
+              </form>
+              <div className="space-y-2 pt-1">
+                {lowRisk.map((c) => (
+                  <ActionCardView key={c.accountId} card={c} emailConfigured={emailConfigured} compact />
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
-      ) : <p className="text-sm text-muted-foreground mb-5">今日队列为空。</p>}
+          </details>
+        )}
 
-      {/* ② Action Queue / 阶段视图 */}
-      <h2 className="text-sm font-semibold mb-2">
-        {stageRows ? `② ${STAGE_CHIPS.find((c) => c.key === stage)?.label ?? ''}客户（${stageRows.length}）` : '② 今日队列（按 PO 价值排序）'}
-      </h2>
-      <div className="rounded-lg border mb-5 divide-y">
-        {queue.map((m) => (
-          <Link key={m.o.companyId} href={`/companies/${m.o.companyId}`} className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent/40">
-            <span className="w-12 shrink-0">{urgencyDot(m.urgency)}{redFlags(m.o).length > 0 ? '🔴' : klassChip(m.o.klass).slice(0, 2)}</span>
-            <span className="font-medium w-40 truncate">{m.o.brand}</span>
-            <span className="text-muted-foreground w-16 shrink-0">{usd(m.value)}</span>
-            <span className="text-muted-foreground w-20 shrink-0">{FUNNEL_LABEL[m.o.stage]}</span>
-            <span className="flex-1 truncate">{m.action}</span>
-          </Link>
-        ))}
-        {queue.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">—</p>}
-      </div>
+        {/* Stuck Opportunities */}
+        {stuck.length > 0 && (
+          <details className="rounded-lg border">
+            <summary className="px-4 py-2.5 text-sm font-medium cursor-pointer">⏳ 卡住的机会（{stuck.length}）—— 长时间无进展，换钩子/换人</summary>
+            <div className="p-3 border-t space-y-2">
+              {stuck.map((c) => (
+                <ActionCardView key={c.accountId} card={c} emailConfigured={emailConfigured} compact />
+              ))}
+            </div>
+          </details>
+        )}
 
-      {/* ③ 漏损 */}
-      <h2 className="text-sm font-semibold mb-2 text-red-700">③ 哪里在漏钱（先堵漏）· 敞口 {usd(leaks.reduce((s, l) => s + l.lostOpportunityCost, 0))}</h2>
-      <div className="rounded-lg border border-red-200 mb-5 divide-y">
-        {leaks.slice(0, 6).map((l, i) => (
-          <Link key={i} href={`/companies/${l.o.companyId}`} className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent/40">
-            <span className="font-mono text-red-600 w-16 shrink-0">{usd(l.lostOpportunityCost)}</span>
-            <span className="w-32 shrink-0 text-muted-foreground">{LEAK_LABEL[l.type]}</span>
-            <span className="font-medium w-40 truncate">{l.o.brand}</span>
-            <span className="flex-1 truncate text-muted-foreground">{l.recovery}</span>
-          </Link>
-        ))}
-        {leaks.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">无漏点 ✅</p>}
-      </div>
-
-      {/* ④ 🟡 补联系人车道（真正的假A级：高价值，无可达联系人） */}
-      {needsContact.length > 0 && (
-        <>
-          <h2 className="text-sm font-semibold mb-2 text-amber-700">④ 🟡 补联系人（高价值但联系不上 · 别开发，先找人）· {needsContact.length}</h2>
-          <div className="rounded-lg border border-amber-200 mb-5 divide-y">
-            {needsContact.slice(0, 8).map((n) => (
-              <Link key={n.companyId} href={`/companies/${n.companyId}`} className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent/40">
-                <span className="w-10 shrink-0">{n.potential === 'P1' ? '🟡P1' : '🟡P2'}</span>
-                <span className="font-medium w-40 truncate">{n.brand}</span>
-                <span className="flex-1 truncate text-muted-foreground">{n.reason}</span>
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* ⑤ 纪律 + 学习（V2） */}
-      <div className="rounded-lg border px-3 py-2 mb-3 text-xs space-y-1">
-        <div>
-          <span className={flaggedCount > 0 ? 'text-red-600 font-medium' : 'text-green-700'}>
-            🔴 纪律：{flaggedCount} 个客户缺「负责人/下一步/截止」</span>
-          <span className="text-muted-foreground ml-1">（点进去补齐，单子才不会静默烂掉）</span>
-        </div>
-        {whyEntries.length > 0 && (
-          <div className="text-muted-foreground">🧠 没回复原因累积：{whyEntries.map(([k, v]) => `${WHY_ZH[k] ?? k} ${v}`).join(' · ')}（拿来改 wedge/CTA）</div>
+        {/* Missing Contact (blocked) */}
+        {blocked.length > 0 && (
+          <details className="rounded-lg border border-amber-200">
+            <summary className="px-4 py-2.5 text-sm font-medium cursor-pointer text-amber-700">
+              🔒 缺联系人 · 已锁（{blocked.length}）—— 无可达决策人，先补联系人才能进队列
+            </summary>
+            <div className="p-3 border-t divide-y">
+              {blocked.map((c) => (
+                <Link key={c.accountId} href={`/companies/${c.accountId}`} className="flex items-center gap-3 px-1 py-2 text-sm hover:bg-accent/40">
+                  <span className="font-medium w-44 truncate">{c.companyName}</span>
+                  <span className="text-muted-foreground text-xs flex-1 truncate">预期PO影响 ${Math.round(c.poImpactUsd / 1000)}k · {c.whyNow}</span>
+                  <span className="text-xs text-primary shrink-0">补联系人 →</span>
+                </Link>
+              ))}
+            </div>
+          </details>
         )}
       </div>
 
-      {/* ⑥ 分级分布（假 A 级已被杀死的证据） */}
-      <div className="text-xs text-muted-foreground">
-        🟢开发 {dist.develop} · 🟡补联系人 {needsContact.length} · ⚫放弃 {dist.drop}
-        <span className="ml-2">（业务员只做 🟢；🟡 先找人；⚫ 不碰——高价值但联系不上的不再冒充 A 级占用时间）</span>
-      </div>
+      <p className="text-[10px] text-muted-foreground/70 mt-4 text-center">共 {total} 个账户 · 按 PO_SCORE 排序 · Action → Approve → Outcome → Next Action</p>
     </div>
   )
 }
